@@ -247,6 +247,13 @@
         <input type="number" id="vac" value="0" min="0" max="8">
       </div>
       <div class="fld">
+        <label for="reserveMode">Les jours de réserve…</label>
+        <select id="reserveMode">
+          <option value="neutre" selected>sont exploités (deviennent des tours)</option>
+          <option value="rcomp">ne sont pas exploités → Rcomp (−410 min)</option>
+        </select>
+      </div>
+      <div class="fld">
         <label for="compMode">Les jours COMP…</label>
         <select id="compMode">
           <option value="debit" selected>débitent le solde (−6 h 50)</option>
@@ -658,7 +665,9 @@ function dtaMin(m){ return sgn(m)+Math.round(m).toLocaleString("fr-CH")+" min"; 
 function dtaLong(m){ return dtaMin(m)+" ("+sgn(m)+Cct.minToHeures(m)+")"; }
 function dtaCourt(m){ return dtaMin(m)+" ("+sgn(m)+Cct.minToHHMM(m)+")"; }
 function typeJour(code){ const c=String(code||"").trim().toUpperCase();
-  if(c==="R"||c==="REPOS")return "repos"; if(c==="COMP")return "comp"; if(estTour(c))return "tour"; return "vide"; }
+  if(c==="R"||c==="REPOS")return "repos"; if(c==="COMP")return "comp";
+  if(c.indexOf("RESERVE")===0||c.indexOf("RÉSERVE")===0||/^R(MA|MI|SO|NU)$/.test(c))return "reserve";
+  if(estTour(c))return "tour"; return "vide"; }
 
 /* couleur = heure de prise de service (le rythme du mécanicien) */
 function couleurTour(debMin){
@@ -672,7 +681,7 @@ function couleurTour(debMin){
 const COUL_COMP="#2b6640", COUL_REPOS="#4a2632", COUL_VAC="#3a4250";
 
 /* ================= calcul de l'année ================= */
-function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite){
+function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite, reserveMode){
   const jours=[];
   const d=new Date(annee,0,1);
   // premier lundi de l'année
@@ -745,6 +754,9 @@ function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite){
       prevFinAbs=finAbs;
     } else if(j.type==="comp"){
       j.dta = (compDebite===false) ? 0 : -Cct.Rcomp_Duree;
+    } else if(j.type==="reserve"){
+      // Un jour de reserve non exploite est converti en jour de compensation : il debite 410 min.
+      j.dta = (reserveMode==="neutre") ? 0 : -Cct.Rcomp_Duree;
     } else if(j.type==="vacances"){ interrompu=true; }
     jours.push(j);
   }
@@ -753,7 +765,7 @@ function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite){
 
 /* ================= agrégations ================= */
 function agreger(jours){
-  const t={services:0,comp:0,repos:0,vacances:0,tt:0,ampl:0,cond:0,dta:0,pause:0,
+  const t={services:0,comp:0,repos:0,vacances:0,reserve:0,tt:0,ampl:0,cond:0,dta:0,pause:0,
            nuitMin:0,samMin:0,dimMin:0,sbnMin:0,
            indNuit:0,indSam:0,indDim:0,sbnChf:0,
            nuitsNocturnes:0,samediTrav:0,dimancheTrav:0,ferieTrav:0,
@@ -775,6 +787,7 @@ function agreger(jours){
       p.n++; p.tt+=j.tt; p.ind+=j.indTotalChf;
     } else if(j.type==="comp"){ t.comp++; M.comp++; t.dta+=j.dta; M.dta+=j.dta; }
     else if(j.type==="repos"){ t.repos++; M.repos++; }
+    else if(j.type==="reserve"){ t.reserve++; t.dta+=j.dta||0; M.dta+=j.dta||0; }
     else if(j.type==="vacances"){ t.vacances++; }
   }
   t.indTotal=t.indNuit+t.indSam+t.indDim+t.sbnChf;
@@ -966,6 +979,14 @@ function controles(jours){
   const nbR=jours.filter(j=>j.type==="repos").length;
   const nbC=jours.filter(j=>j.type==="comp").length;
   const nbVac=jours.filter(j=>j.type==="vacances").length;
+  const nbRes=jours.filter(j=>j.type==="reserve").length;
+  if(nbRes) r.push({niveau:"warn", titre:"Jours de réserve",
+    detail:`La rotation comporte <b>${nbRes}</b> jours de réserve sur l'année (RMA, RMI, RSO, RNU selon l'heure de prise).<br>`+
+      `Un jour de réserve <b>non exploité</b> est converti en jour de compensation et débite alors <b>410 min</b> — `+
+      `soit <b>${dtaLong(-nbRes*Cct.Rcomp_Duree)}</b> si aucun n'est utilisé, contre 0 s'ils sont tous transformés en tours.<br>`+
+      `L'écart entre ces deux extrêmes est de <b>${Cct.minToHeures(nbRes*Cct.Rcomp_Duree)}</b> : c'est le réglage `+
+      `« Les jours de réserve… » qui décide. L'annexe 4 précise que la réserve n'est attribuée qu'après avoir planifié `+
+      `les 64 jours de repos, les compensations dues, les vacances et les RR.`});
   r.push({niveau:"ok", titre:"Jours de repos et de compensation",
     detail:`La rotation planifie <b>${nbR}</b> jours de repos et <b>${nbC}</b> jours de compensation`+
       (nbVac?`, plus ${nbVac} jours de vacances`:"")+`, soit <b>${nbR+nbC+nbVac}</b> jours sans service.<br>`+
@@ -1076,6 +1097,7 @@ function lireRotation(mots){
       const txt=ws.map(w=>w.t).join(" ").toUpperCase();
       if(txt.indexOf("REPOS")>=0){ ligne.push("R"); ligneRepos.push(null); continue; }
       if(txt.indexOf("COMP")>=0){ ligne.push("COMP"); ligneRepos.push(null); continue; }
+      if(txt.indexOf("RESERVE")>=0||txt.indexOf("RÉSERVE")>=0){ ligne.push("RESERVE"); ligneRepos.push(null); continue; }
       const wt=ws.find(w=>RE_TOUR.test(w.t));
       const heures=ws.filter(w=>RE_HEURE.test(w.t));
       if(!wt||heures.length<2){ ligne.push(""); ligneRepos.push(null); continue; }
@@ -1145,8 +1167,9 @@ function rendre(){
   const vac=+$("vac").value||0;
   const deduire=$("deduirePause").checked;
   const compDebite=$("compMode").value!=="neutre";
+  const reserveMode=$("reserveMode").value;
 
-  const jours=calculerAnnee(annee,semDepart,vac,deduire,compDebite);
+  const jours=calculerAnnee(annee,semDepart,vac,deduire,compDebite,reserveMode);
   const t=agreger(jours);
   JOURS_CACHE=jours; TOT_CACHE=t;
 
@@ -1157,15 +1180,20 @@ function rendre(){
   const semEff = Math.max(1,(jours.length-t.vacances)/7);
   const hSem = t.tt/60/semEff;
   $("kpis").innerHTML=[
-    kpi("Jours de service", nb(t.services), `${t.comp} compensations · ${t.repos} repos`+(t.vacances?` · ${t.vacances} j. vacances`:"")),
+    kpi("Jours de service", nb(t.services), `${t.comp} compensations · ${t.repos} repos`+(t.reserve?` · <b style="color:var(--amber)">${t.reserve} réserve</b>`:"")+(t.vacances?` · ${t.vacances} j. vacances`:"")),
     kpi("Temps de travail", Cct.minToHeures(t.tt),
         `${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service · <b style="color:var(--txt)">${hSem.toFixed(1)} h</b> par semaine travaillée`,"info"),
     kpi("Amplitude cumulée", Cct.minToHeures(t.ampl), `dont ${Cct.minToHeures(t.pause)} de pauses`),
     kpi("Temps de conduite", Cct.minToHeures(t.cond), `${t.tt?Math.round(t.cond/t.tt*100):0} % du temps de travail`),
     kpi("Solde DTA", dtaMin(t.dta),
-        `<b style="color:var(--txt)">${sgn(t.dta)+Cct.minToHeures(t.dta)}</b> · ou ${dtaLong(autreDta)} si les jours COMP `
-        +`${compDebite?"ne touchent pas le solde":"débitent le solde"} — écart de ${dtaLong(t.comp*Cct.Rcomp_Duree)}. `
-        +`Voir « Équilibre du solde DTA ».`,
+        `<b style="color:var(--txt)">${sgn(t.dta)+Cct.minToHeures(t.dta)}</b>`
+        + (t.reserve
+            ? ` — <b style="color:var(--amber)">hypothèse : les ${t.reserve} jours de réserve ${reserveMode==="rcomp"?"ne sont PAS exploités":"sont exploités"}</b>`
+              + `. S'ils ${reserveMode==="rcomp"?"le sont tous":"ne l'étaient pas"}, le solde devient `
+              + `<b>${dtaLong(reserveMode==="rcomp" ? t.dta+t.reserve*Cct.Rcomp_Duree : t.dta-t.reserve*Cct.Rcomp_Duree)}</b>`
+            : ``)
+        + ` · ou ${dtaLong(autreDta)} si les jours COMP `
+        + `${compDebite?"ne touchent pas le solde":"débitent le solde"}. Voir « Équilibre du solde DTA ».`,
         t.dta>=0?"good":"info"),
     kpi("Indemnités", chf(t.indTotal)+" CHF", `nuit ${chf(t.indNuit)} · sam ${chf(t.indSam)} · dim ${chf(t.indDim)} · SBN ${chf(t.sbnChf)}`,"good"),
     kpi("Bonification nuit", Cct.minToHeures(t.sbnMin), `${chf(t.sbnChf)} CHF · ${(t.sbnMin/410).toFixed(2)} jours de congé`,"info"),
@@ -1196,6 +1224,7 @@ function rendreRuban(jours){
            (j.repos!=null?` · repos avant ${Cct.minToHHMM(j.repos)}`:""); }
     else if(j.type==="comp"){ bg=COUL_COMP; info="Jour de compensation"; }
     else if(j.type==="repos"){ bg=COUL_REPOS; info="Jour de repos"; }
+    else if(j.type==="reserve"){ bg="#7a5a1e"; info="Jour de réserve"; }
     else if(j.type==="vacances"){ bg=COUL_VAC; info="Vacances"; }
     c.style.background=bg;
     if(j.estFerie) c.style.boxShadow="inset 0 0 0 1.5px #f0c040";
@@ -1226,6 +1255,7 @@ function rendreRuban(jours){
     `<span><i style="background:#6355c9"></i>après 19 h</span>`+
     `<span><i style="background:${COUL_COMP}"></i>compensation</span>`+
     `<span><i style="background:${COUL_REPOS}"></i>repos</span>`+
+    `<span><i style="background:#7a5a1e"></i>réserve</span>`+
     `<span><i style="box-shadow:inset 0 0 0 1.5px #f0c040;background:#1a2029"></i>jour férié</span>`;
 }
 
@@ -1803,7 +1833,7 @@ function majSelecteurSemaines(){
   majSelecteurSemaines();
   rendreEditeur();
   rendre();
-  ["annee","sem1","vac","deduirePause","compMode"].forEach(id=>$(id).addEventListener("change",rendre));
+  ["annee","sem1","vac","deduirePause","compMode","reserveMode"].forEach(id=>$(id).addEventListener("change",rendre));
   $("depot").addEventListener("change",e=>{
     chargerDepot(e.target.value); majSelecteurSemaines();
     $("rotSrc").textContent="rotation officielle "+DEPOTS[DEPOT_ACTIF].nom+" — projet 2027";
