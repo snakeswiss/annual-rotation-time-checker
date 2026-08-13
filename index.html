@@ -206,7 +206,17 @@
 <main>
 
   <div class="card">
-    <h2>Rotation chargée <span class="note" id="rotSrc">exemple : rotation CDF (planning 04.10.2027 – 10.10.2027)</span></h2>
+    <h2>Rotation chargée <span class="note" id="rotSrc">rotation officielle La Chaux-de-Fonds — projet 2027</span></h2>
+    <div class="params" style="margin-bottom:12px">
+      <div class="fld">
+        <label for="depot">Dépôt</label>
+        <select id="depot">
+          <option value="CDF">La Chaux-de-Fonds — 9 semaines</option>
+          <option value="NE">Neuchâtel — 15 semaines</option>
+          <option value="FLE">Fleurier — 9 semaines</option>
+        </select>
+      </div>
+    </div>
     <div class="importrow">
       <button class="primary big" id="btnImport2">📄 Importer une rotation (PDF)</button>
       <button id="btnImportAutre">Autre fichier (JSON, image)</button>
@@ -215,7 +225,7 @@
     <input type="file" id="fileAutre" accept=".json,application/json,image/*" class="sr-only" tabindex="-1" aria-hidden="true">
     <div class="drop" id="drop">
       <b>Ou glissez le PDF ici</b> depuis votre ordinateur.<br>
-      <span style="font-size:12px">Le tableau est lu directement dans le PDF : dates en en-tête, une ligne par semaine du cycle, et pour chaque tour l'horaire, le temps de travail et le temps de conduite. Un fichier JSON exporté d'ici fonctionne aussi. Une image sert seulement de référence visuelle (les chiffres n'y sont pas lisibles).</span>
+      <span style="font-size:12px">Deux formats sont reconnus : un <b>tableau de rotation</b> (dates en en-tête, une ligne par semaine du cycle) et un <b>GANTT</b> (colonnes Ampl. / TT / SBN / Supp / TR), qui aligne les minutages sur les valeurs officielles. Un fichier JSON exporté d'ici fonctionne aussi.<br>Attention : dans le PDF « Projet rotations 2027 » de transN, les tableaux sont des <b>images</b> — ils ne peuvent pas être lus. Les trois rotations y figurant sont déjà intégrées ci-dessus.</span>
     </div>
     <div id="importMsg"></div>
     <img id="refImg" alt="Planning de rotation déposé, affiché en référence">
@@ -414,56 +424,219 @@ const Cct = {
 };
 
 /* ===================================================================
-   ROTATION CDF — relevée sur le planning du 04.10.2027 au 10.10.2027.
-   9 lignes = les 9 positions du cycle ; un mécanicien descend d'une
-   ligne par semaine et repasse de la 9 à la 1.
+   ROTATIONS 2027 DES TROIS DÉPÔTS (PROJET transN du 13.08.2026) et
+   données GANTT officielles valables dès le 13.12.2026.
+   Les horaires ont tous été vérifiés : fin − début redonne exactement
+   l'amplitude imprimée sur le GANTT (46 tours sur 46).
    =================================================================== */
-const ROT_DEFAUT = [
-  ["1203","COMP","1201","1202","1203","COMP","R"   ],
-  ["1205","1206","1207","R"   ,"1201","1252","1251"],
-  ["1202","1203","1204","COMP","COMP","R"   ,"1253"],
-  ["1204","1204","1205","1207","R"   ,"1255","1254"],
-  ["1207","1205","COMP","1205","1206","COMP","R"   ],
-  ["1201","1202","1203","1204","1205","1253","R"   ],
-  ["COMP","R"   ,"1206","1206","1207","1254","1255"],
-  ["COMP","1201","1202","1203","1204","COMP","R"   ],
-  ["1206","1207","R"   ,"1201","1202","1251","1252"]
-];
-
-/* Tours : début, fin, temps de travail et temps de conduite du planning.
-   pause = heure de début de la collation quand elle est connue. */
-const TOURS_DEFAUT = {
-  "1201":{deb:"18:13", fin:"01:11", tt:388, cond:256, pause:"21:08", lieu:"Bienne"},
-  "1202":{deb:"15:13", fin:"00:09", tt:503, cond:201, pause:"20:19", lieu:"Neuchâtel"},
-  "1203":{deb:"12:14", fin:"19:56", tt:462, cond:263, pause:"",      lieu:""},
-  "1204":{deb:"10:13", fin:"18:00", tt:430, cond:139, pause:"",      lieu:""},
-  "1205":{deb:"06:19", fin:"15:34", tt:513, cond:247, pause:"",      lieu:""},
-  "1206":{deb:"04:20", fin:"13:36", tt:523, cond:358, pause:"",      lieu:""},
-  "1207":{deb:"04:06", fin:"10:34", tt:358, cond:191, pause:"",      lieu:""},
-  "1251":{deb:"15:13", fin:"01:12", tt:549, cond:286, pause:"",      lieu:""},
-  "1252":{deb:"14:20", fin:"00:21", tt:571, cond:295, pause:"",      lieu:""},
-  "1253":{deb:"05:19", fin:"15:37", tt:588, cond:245, pause:"",      lieu:""},
-  "1254":{deb:"05:13", fin:"15:10", tt:533, cond:273, pause:"",      lieu:""},
-  "1255":{deb:"04:00", fin:"13:30", tt:534, cond:295, pause:"",      lieu:""}
+const DEPOTS = {
+  "CDF": {
+    nom: "La Chaux-de-Fonds",
+    rot: [
+      ["1203","COMP","1201","1202","1203","COMP","R"],
+      ["1205","1206","1207","R","1201","1252","1251"],
+      ["1202","1203","1204","COMP","COMP","R","1253"],
+      ["1204","1204","1205","1207","R","1255","1254"],
+      ["1207","1205","COMP","1205","1206","COMP","R"],
+      ["1201","1202","1203","1204","1205","1253","R"],
+      ["COMP","R","1206","1206","1207","1254","1255"],
+      ["COMP","1201","1202","1203","1204","COMP","R"],
+      ["1206","1207","R","1201","1202","1251","1252"],
+    ],
+    tours: {
+      "1201":{deb:"18:13",fin:"01:11",tt:388,cond:256,pause:"21:08",lieu:"Bienne"},
+      "1202":{deb:"15:13",fin:"00:09",tt:503,cond:201,pause:"20:19",lieu:"Neuchâtel"},
+      "1203":{deb:"12:14",fin:"19:56",tt:462,cond:263,pause:"",lieu:""},
+      "1204":{deb:"10:13",fin:"18:00",tt:430,cond:139,pause:"",lieu:""},
+      "1205":{deb:"06:19",fin:"15:34",tt:513,cond:247,pause:"",lieu:""},
+      "1206":{deb:"04:20",fin:"13:36",tt:523,cond:358,pause:"",lieu:""},
+      "1207":{deb:"04:06",fin:"10:34",tt:358,cond:191,pause:"",lieu:""},
+      "1251":{deb:"15:13",fin:"01:12",tt:549,cond:286,pause:"",lieu:""},
+      "1252":{deb:"14:20",fin:"00:21",tt:571,cond:295,pause:"",lieu:""},
+      "1253":{deb:"05:19",fin:"15:37",tt:588,cond:245,pause:"",lieu:""},
+      "1254":{deb:"05:13",fin:"15:10",tt:533,cond:273,pause:"",lieu:""},
+      "1255":{deb:"04:00",fin:"13:30",tt:534,cond:295,pause:"",lieu:""},
+    },
+    gantt: {
+      "1201":{ampl:418,tt:388,sbn:40,supp:0,tr:428},
+      "1202":{ampl:536,tt:503,sbn:16,supp:0,tr:519},
+      "1203":{ampl:462,tt:462,sbn:0,supp:0,tr:462},
+      "1204":{ampl:467,tt:430,sbn:0,supp:0,tr:430},
+      "1205":{ampl:555,tt:513,sbn:0,supp:0,tr:513},
+      "1206":{ampl:556,tt:523,sbn:0,supp:0,tr:523},
+      "1207":{ampl:388,tt:358,sbn:0,supp:0,tr:358},
+      "1251":{ampl:599,tt:549,sbn:41,supp:0,tr:590},
+      "1252":{ampl:601,tt:571,sbn:20,supp:0,tr:591},
+      "1253":{ampl:618,tt:588,sbn:0,supp:0,tr:588},
+      "1254":{ampl:597,tt:533,sbn:0,supp:5,tr:538},
+      "1255":{ampl:570,tt:534,sbn:0,supp:0,tr:534},
+    },
+    repos: [
+      [713,null,2777,842,725,null,null],
+      [3503,766,870,null,3339,789,892],
+      [841,725,857,null,null,null,4999],
+      [1116,973,739,752,null,2486,943],
+      [776,1185,null,2325,766,null,null],
+      [4597,842,725,857,739,825,null],
+      [null,null,5083,884,870,1119,770],
+      [null,3163,842,725,857,null,null],
+      [3500,870,null,3339,842,904,788],
+    ]
+  },
+  "NE": {
+    nom: "Neuchâtel",
+    rot: [
+      ["1010","COMP","1004","1001","1004","COMP","R"],
+      ["1001","1003","1005","R","1006","1057","1060"],
+      ["COMP","RESERVE","1012","1010","1012","COMP","R"],
+      ["1003","1001","1002","1004","R","1054","1055"],
+      ["1002","1005","COMP","1006","1007","COMP","R"],
+      ["1007","1012","1008","R","1002","1053","1051"],
+      ["1004","COMP","1006","1008","1011","COMP","R"],
+      ["COMP","1002","1001","1005","R","1056","1061"],
+      ["1006","1007","COMP","1011","1010","COMP","R"],
+      ["1011","1010","1011","R","1003","1051","1052"],
+      ["1005","COMP","RESERVE","1007","1008","COMP","R"],
+      ["1012","1008","1010","RESERVE","R","1058","1056"],
+      ["1008","1011","R","1003","1001","1055","1054"],
+      ["COMP","1004","1003","1002","1005","COMP","R"],
+      ["COMP","1006","1007","1012","R","1059","1058"],
+    ],
+    tours: {
+      "1001":{deb:"15:40",fin:"00:11",tt:511,cond:328,pause:"",lieu:""},
+      "1002":{deb:"16:47",fin:"00:03",tt:436,cond:257,pause:"",lieu:""},
+      "1003":{deb:"16:34",fin:"00:03",tt:449,cond:233,pause:"",lieu:""},
+      "1004":{deb:"12:42",fin:"22:03",tt:519,cond:258,pause:"",lieu:""},
+      "1005":{deb:"12:34",fin:"21:03",tt:468,cond:244,pause:"",lieu:""},
+      "1006":{deb:"08:23",fin:"16:44",tt:453,cond:289,pause:"",lieu:""},
+      "1007":{deb:"05:42",fin:"14:44",tt:504,cond:260,pause:"",lieu:""},
+      "1008":{deb:"05:16",fin:"13:32",tt:462,cond:201,pause:"",lieu:""},
+      "1010":{deb:"04:09",fin:"12:54",tt:471,cond:265,pause:"",lieu:""},
+      "1011":{deb:"03:56",fin:"12:47",tt:498,cond:278,pause:"",lieu:""},
+      "1012":{deb:"03:56",fin:"10:20",tt:384,cond:116,pause:"",lieu:""},
+      "1051":{deb:"15:47",fin:"00:41",tt:497,cond:272,pause:"",lieu:""},
+      "1052":{deb:"14:42",fin:"00:12",tt:537,cond:242,pause:"",lieu:""},
+      "1053":{deb:"16:09",fin:"00:03",tt:474,cond:311,pause:"",lieu:""},
+      "1054":{deb:"11:07",fin:"21:44",tt:600,cond:234,pause:"",lieu:""},
+      "1055":{deb:"11:47",fin:"22:03",tt:586,cond:145,pause:"",lieu:""},
+      "1056":{deb:"06:50",fin:"16:30",tt:540,cond:24,pause:"",lieu:""},
+      "1057":{deb:"05:47",fin:"15:24",tt:547,cond:259,pause:"",lieu:""},
+      "1058":{deb:"03:50",fin:"13:44",tt:564,cond:253,pause:"",lieu:""},
+      "1059":{deb:"03:45",fin:"11:29",tt:464,cond:149,pause:"",lieu:""},
+      "1060":{deb:"03:45",fin:"11:29",tt:464,cond:157,pause:"",lieu:""},
+      "1061":{deb:"05:47",fin:"15:24",tt:547,cond:262,pause:"",lieu:""},
+    },
+    gantt: {
+      "1001":{ampl:511,tt:511,sbn:16,supp:0,tr:527},
+      "1002":{ampl:436,tt:436,sbn:13,supp:0,tr:449},
+      "1003":{ampl:449,tt:449,sbn:13,supp:0,tr:462},
+      "1004":{ampl:561,tt:519,sbn:0,supp:0,tr:519},
+      "1005":{ampl:509,tt:468,sbn:0,supp:0,tr:468},
+      "1006":{ampl:501,tt:453,sbn:0,supp:0,tr:453},
+      "1007":{ampl:542,tt:504,sbn:0,supp:0,tr:504},
+      "1008":{ampl:496,tt:462,sbn:0,supp:0,tr:462},
+      "1010":{ampl:525,tt:471,sbn:0,supp:0,tr:471},
+      "1011":{ampl:531,tt:498,sbn:26,supp:0,tr:524},
+      "1012":{ampl:384,tt:384,sbn:26,supp:0,tr:410},
+      "1051":{ampl:534,tt:497,sbn:28,supp:0,tr:525},
+      "1052":{ampl:570,tt:537,sbn:17,supp:0,tr:554},
+      "1053":{ampl:474,tt:474,sbn:13,supp:0,tr:487},
+      "1054":{ampl:637,tt:600,sbn:0,supp:0,tr:600},
+      "1055":{ampl:616,tt:586,sbn:0,supp:0,tr:586},
+      "1056":{ampl:580,tt:540,sbn:0,supp:0,tr:540},
+      "1057":{ampl:577,tt:547,sbn:0,supp:0,tr:547},
+      "1058":{ampl:594,tt:564,sbn:28,supp:0,tr:592},
+      "1059":{ampl:464,tt:464,sbn:30,supp:0,tr:494},
+      "1060":{ampl:464,tt:464,sbn:30,supp:0,tr:494},
+      "1061":{ampl:577,tt:547,sbn:0,supp:0,tr:547},
+    },
+    repos: [
+      [865,null,2868,1057,751,null,null],
+      [3937,983,751,null,2120,783,741],
+      [null,null,3867,1069,902,null,null],
+      [4694,937,996,759,null,2224,843],
+      [1124,751,null,2120,778,null,null],
+      [3778,792,1136,null,3075,966,944],
+      [721,null,2060,752,864,null,null],
+      [null,null,937,743,null,2027,797],
+      [1019,778,null,2232,922,null,null],
+      [3782,922,902,null,3107,944,841],
+      [742,null,null,3399,872,null,null],
+      [3744,1136,877,null,null,3776,1026],
+      [766,864,null,3107,937,696,784],
+      [null,2338,1111,1004,751,null,null],
+      [null,5000,778,792,null,2485,981],
+    ]
+  },
+  "FLE": {
+    nom: "Fleurier",
+    rot: [
+      ["1105","1107","R","1101","1102","1151","1152"],
+      ["1103","COMP","1101","1102","1103","COMP","R"],
+      ["1104","1105","1106","1107","R","1154","1155"],
+      ["1107","1106","1107","R","1101","1152","1151"],
+      ["1102","1104","COMP","1105","1106","COMP","R"],
+      ["R","1103","1104","1104","1105","1155","1153"],
+      ["COMP","1101","1102","1103","COMP","COMP","R"],
+      ["1101","1102","1103","R","1104","1153","1154"],
+      ["1106","COMP","1105","1106","1107","COMP","R"],
+    ],
+    tours: {
+      "1101":{deb:"16:04",fin:"00:52",tt:494,cond:307,pause:"",lieu:""},
+      "1102":{deb:"15:30",fin:"00:39",tt:507,cond:184,pause:"",lieu:""},
+      "1103":{deb:"12:51",fin:"21:27",tt:471,cond:229,pause:"",lieu:""},
+      "1104":{deb:"12:04",fin:"20:26",tt:502,cond:225,pause:"",lieu:""},
+      "1105":{deb:"08:20",fin:"16:26",tt:445,cond:209,pause:"",lieu:""},
+      "1106":{deb:"04:31",fin:"12:26",tt:439,cond:194,pause:"",lieu:""},
+      "1107":{deb:"04:49",fin:"12:12",tt:443,cond:166,pause:"",lieu:""},
+      "1151":{deb:"16:25",fin:"00:55",tt:479,cond:349,pause:"",lieu:""},
+      "1152":{deb:"15:30",fin:"00:26",tt:503,cond:245,pause:"",lieu:""},
+      "1153":{deb:"08:31",fin:"18:23",tt:559,cond:281,pause:"",lieu:""},
+      "1154":{deb:"07:19",fin:"16:27",tt:511,cond:241,pause:"",lieu:""},
+      "1155":{deb:"04:59",fin:"13:27",tt:478,cond:237,pause:"",lieu:""},
+    },
+    gantt: {
+      "1101":{ampl:528,tt:494,sbn:33,supp:0,tr:527},
+      "1102":{ampl:549,tt:507,sbn:28,supp:0,tr:535},
+      "1103":{ampl:516,tt:471,sbn:0,supp:0,tr:471},
+      "1104":{ampl:502,tt:502,sbn:0,supp:0,tr:502},
+      "1105":{ampl:486,tt:445,sbn:0,supp:0,tr:445},
+      "1106":{ampl:475,tt:439,sbn:0,supp:0,tr:439},
+      "1107":{ampl:443,tt:443,sbn:0,supp:0,tr:443},
+      "1151":{ampl:510,tt:479,sbn:34,supp:0,tr:513},
+      "1152":{ampl:536,tt:503,sbn:22,supp:0,tr:525},
+      "1153":{ampl:592,tt:559,sbn:0,supp:0,tr:559},
+      "1154":{ampl:548,tt:511,sbn:0,supp:0,tr:511},
+      "1155":{ampl:508,tt:478,sbn:0,supp:0,tr:478},
+    },
+    repos: [
+      [4088,743,null,3112,878,946,875],
+      [745,null,2557,878,732,null,null],
+      [3757,714,725,983,null,2587,752],
+      [922,979,983,null,3112,878,959],
+      [875,685,null,2154,725,null,null],
+      [null,5785,877,938,714,753,1144],
+      [null,2741,878,732,null,null,null],
+      [5437,878,732,null,2317,725,776],
+      [724,null,2634,725,983,null,null],
+    ]
+  },
 };
 
-/* Temps de repos imprimés sur le planning, en minutes (null = pas de tour).
-   Ils servent de contrôle : le calcul doit retomber dessus. */
-const REPOS_DEFAUT=[
-  [ 713, null,2777, 842, 725, null,null],
-  [3503, 766, 870, null,3339, 789, 892],
-  [ 841, 725, 857, null,null,null,4999],
-  [1116, 973, 739, 752, null,2486, 943],
-  [ 776,1185, null,2325, 766, null,null],
-  [4597, 842, 725, 857, 739, 825, null],
-  [null,null,5083, 884, 870,1119, 770],
-  [null,3163, 842, 725, 857, null,null],
-  [3500, 870, null,3339, 842, 904, 788]
-];
-let REPOS_REF = REPOS_DEFAUT.map(r=>r.slice());
-let ROT = JSON.parse(JSON.stringify(ROT_DEFAUT));
-let TOURS = JSON.parse(JSON.stringify(TOURS_DEFAUT));
+let DEPOT_ACTIF = "CDF";
+let ROT   = DEPOTS[DEPOT_ACTIF].rot.map(l=>l.slice());
+let TOURS = JSON.parse(JSON.stringify(DEPOTS[DEPOT_ACTIF].tours));
+let REPOS_REF = DEPOTS[DEPOT_ACTIF].repos ? DEPOTS[DEPOT_ACTIF].repos.map(l=>l.slice()) : null;
+let GANTT_REF = JSON.parse(JSON.stringify(DEPOTS[DEPOT_ACTIF].gantt));
 
+function chargerDepot(code){
+  const d=DEPOTS[code]; if(!d)return;
+  DEPOT_ACTIF=code;
+  ROT=d.rot.map(l=>l.slice());
+  TOURS=JSON.parse(JSON.stringify(d.tours));
+  REPOS_REF=d.repos?d.repos.map(l=>l.slice()):null;
+  GANTT_REF=JSON.parse(JSON.stringify(d.gantt));
+}
 /* ================= utilitaires ================= */
 const $=id=>document.getElementById(id);
 const JOURS=["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
@@ -630,6 +803,25 @@ function controles(jours){
         : `La rotation est <b>sous ce plafond de ${(MAX_LEGAL-moyQuot).toFixed(1)} min par jour</b> : elle est conforme sur ce point.`)+
       `<br><span style="color:var(--amber)">Attention : la loi plafonne la durée du travail, elle ne garantit pas un volume minimal. `+
       `La norme de 410 min utilisée pour le solde DTA est une référence interne de l'entreprise, pas un minimum légal.</span>`});
+
+  // concordance avec le GANTT officiel : amplitude, temps de travail et bonification
+  if(typeof GANTT_REF==="object" && GANTT_REF && Object.keys(GANTT_REF).length){
+    const codes=[...new Set(tours.map(j=>j.code))].sort();
+    let okA=0,okT=0,okS=0,nA=0,nT=0,nS=0; const ecarts=[];
+    for(const c of codes){
+      const g=GANTT_REF[c], T=TOURS[c]; if(!g||!T)continue;
+      const a=Cct.amplitude(toMin(T.deb),toMin(T.fin));
+      nA++; if(a===g.ampl)okA++; else if(ecarts.length<3)ecarts.push(`${c} : amplitude ${Cct.minToHHMM(a)} contre ${Cct.minToHHMM(g.ampl)} au GANTT`);
+      nT++; if(T.tt===g.tt)okT++; else if(ecarts.length<3)ecarts.push(`${c} : travail ${T.tt} min contre ${g.tt} min au GANTT`);
+      const ex=tours.find(j=>j.code===c);
+      if(ex&&g.sbn){ nS++; if(Math.abs(ex.sbnMin-g.sbn)<=1)okS++; else if(ecarts.length<3)ecarts.push(`${c} : bonification ${ex.sbnMin} min contre ${g.sbn} min au GANTT`); }
+    }
+    if(nA) r.push({niveau: ecarts.length?"warn":"ok", titre:"Concordance avec le GANTT officiel",
+      detail:`Amplitudes : <b>${okA}/${nA}</b> · temps de travail : <b>${okT}/${nT}</b> · bonifications de nuit calculées : <b>${okS}/${nS}</b>.<br>`+
+        (ecarts.length
+          ? `Écarts relevés : ${ecarts.join(" ; ")}. Vérifiez les horaires dans « Modifier la rotation ».`
+          : `Tout concorde avec les minutages imprimés sur le GANTT transN : les horaires sont bons, et le moteur retrouve les bonifications de nuit officielles.`)});
+  }
 
   // cohérence avec le planning : les repos imprimés doivent retomber sur le calcul
   if(REPOS_REF && REPOS_REF.length){
@@ -910,6 +1102,38 @@ function lireRotation(mots){
   }
   if(!rot.flat().filter(c=>RE_TOUR.test(c)).length) throw new Error("aucun tour de service trouvé dans le tableau");
   return {rot, tours, repos, colonnes:cols.map(c=>c.label)};
+}
+
+/* Lecture d'un GANTT transN : tableau à colonnes Ampl. / TT / SBN / Supp / TR.
+   Il ne contient pas les heures de prise en texte (elles sont dessinées),
+   mais il donne les minutages officiels, qui servent à vérifier la rotation. */
+function lireGantt(mots){
+  const heads={};
+  for(const w of mots){
+    if(["Ampl.","TT","SBN","Supp","TR"].indexOf(w.t)>=0 && !heads[w.t]) heads[w.t]=(w.x0+w.x1)/2;
+  }
+  const noms=Object.keys(heads);
+  if(noms.length<3) throw new Error("ce PDF ne ressemble pas à un GANTT (colonnes Ampl./TT/SBN/TR absentes)");
+  const ordre=noms.map(k=>[k,heads[k]]).sort((a,b)=>a[1]-b[1]);
+  const bornes={};
+  ordre.forEach((o,i)=>{
+    bornes[o[0]]=[ i===0?-Infinity:(ordre[i-1][1]+o[1])/2,
+                   i===ordre.length-1?Infinity:(o[1]+ordre[i+1][1])/2 ];
+  });
+  const xmin=Math.min.apply(null,noms.map(k=>heads[k]))-40;
+  const out={};
+  for(const w of mots){
+    if(!/^\d{3,4}$/.test(w.t) || w.x0>xmin) continue;
+    const row={};
+    for(const v of mots){
+      if(Math.abs(v.y-w.y)>6 || !/^\d{1,4}$/.test(v.t)) continue;
+      const cx=(v.x0+v.x1)/2; if(cx<xmin) continue;
+      for(const k in bornes) if(cx>=bornes[k][0]&&cx<bornes[k][1]) row[k]=+v.t;
+    }
+    if(row["Ampl."]&&row["TT"]) out[w.t]={ampl:row["Ampl."],tt:row["TT"],sbn:row["SBN"]||0,supp:row["Supp"]||0,tr:row["TR"]||0};
+  }
+  if(!Object.keys(out).length) throw new Error("aucun tour lisible dans ce GANTT");
+  return out;
 }
 
 /* ================= rendu ================= */
@@ -1215,6 +1439,23 @@ async function traiterFichier(f){
     msgImport("Lecture du PDF…");
     try{
       const mots=await motsDuPdf(f);
+      // un GANTT se reconnaît à ses colonnes de minutages
+      let gantt=null;
+      try{ gantt=lireGantt(mots); }catch(e){}
+      if(gantt){
+        let maj=0, inconnus=[];
+        for(const c in gantt){
+          if(TOURS[c]){ TOURS[c].tt=gantt[c].tt; maj++; } else inconnus.push(c);
+          GANTT_REF[c]=gantt[c];
+        }
+        $("rotSrc").textContent=`${f.name} — GANTT, ${Object.keys(gantt).length} tours`;
+        msgImport(`GANTT lu : <b>${Object.keys(gantt).length} tours</b>, dont <b>${maj}</b> présents dans la rotation `
+          +`— leurs temps de travail ont été alignés sur le GANTT.`
+          +(inconnus.length?` Tours du GANTT absents de la rotation : ${inconnus.join(", ")}.`:"")
+          +` Les heures de prise ne figurent pas en texte dans un GANTT : elles restent celles de la rotation.`,"ok");
+        rendreEditeur(); rendre();
+        return;
+      }
       const res=lireRotation(mots);
       ROT=res.rot; TOURS=res.tours; REPOS_REF=res.repos||null;
       majSelecteurSemaines();
@@ -1563,9 +1804,14 @@ function majSelecteurSemaines(){
   rendreEditeur();
   rendre();
   ["annee","sem1","vac","deduirePause","compMode"].forEach(id=>$(id).addEventListener("change",rendre));
+  $("depot").addEventListener("change",e=>{
+    chargerDepot(e.target.value); majSelecteurSemaines();
+    $("rotSrc").textContent="rotation officielle "+DEPOTS[DEPOT_ACTIF].nom+" — projet 2027";
+    msgImport(""); rendreEditeur(); rendre();
+  });
   $("btnApply").onclick=()=>{ lireEditeur(); REPOS_REF=null; rendreEditeur(); rendre(); };
-  $("btnReset").onclick=()=>{ ROT=JSON.parse(JSON.stringify(ROT_DEFAUT)); TOURS=JSON.parse(JSON.stringify(TOURS_DEFAUT)); REPOS_REF=REPOS_DEFAUT.map(r=>r.slice());
-    majSelecteurSemaines(); $("rotSrc").textContent="exemple : rotation CDF (planning 04.10.2027 – 10.10.2027)"; msgImport(""); rendreEditeur(); rendre(); };
+  $("btnReset").onclick=()=>{ chargerDepot(DEPOT_ACTIF); majSelecteurSemaines();
+    $("rotSrc").textContent="rotation officielle "+DEPOTS[DEPOT_ACTIF].nom+" — projet 2027"; msgImport(""); rendreEditeur(); rendre(); };
 })();
 </script>
 </body>
