@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rotation — calculateur annuel des heures</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --line:#2a3240; --txt:#dfe6f0;
+    --muted:#8b97a8; --accent:#4aa3ff; --green:#3fb950; --greenbg:#10311b;
+    --amber:#d6a316; --amberbg:#2e2710; --red:#f0556a; --redbg:#3a1620;
+    --blue:#58a6ff; --bluebg:#10243e;
+    --mono:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--txt)}
+  header{background:#0b0e13;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .sub{font-size:11.5px;color:var(--muted)}
+  header .spacer{margin-left:auto}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:13px;cursor:pointer}
+  button:hover{background:#243044}
+  button.primary{background:#17406e;border-color:#2b5c96;color:#eaf3ff}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  main{padding:14px 16px 40px;max-width:1400px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .card > h2{margin:0 0 10px;font-size:13px;letter-spacing:.6px;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .card > h2 .note{text-transform:none;letter-spacing:0;color:var(--muted);font-weight:400;font-size:11.5px;margin-left:8px}
+
+  /* paramètres */
+  .params{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+  .fld{display:flex;flex-direction:column;gap:4px}
+  .fld label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .fld input,.fld select{background:#0b0f15;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:13.5px;font-family:var(--mono)}
+  .fld input[type=number]{width:96px}
+  .chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--txt)}
+
+  /* zone de dépôt */
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .importrow{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:11px}
+  button.big{padding:11px 16px;font-size:14px;font-weight:600}
+  .drop{border:1.5px dashed var(--line);border-radius:9px;padding:16px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;transition:.15s}
+  .drop:hover,.drop.over{border-color:var(--accent);background:#101827;color:var(--txt)}
+  .drop b{color:var(--txt)}
+  #refImg{max-width:100%;border:1px solid var(--line);border-radius:8px;margin-top:12px;display:none}
+
+  /* KPI */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .kpi .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .kpi .v{font-family:var(--mono);font-size:21px;font-weight:600;margin-top:3px;letter-spacing:-.5px}
+  .kpi .s{font-size:11px;color:var(--muted);margin-top:1px}
+  .kpi.good .v{color:var(--green)} .kpi.warn .v{color:var(--amber)} .kpi.bad .v{color:var(--red)} .kpi.info .v{color:var(--blue)}
+
+  /* ruban annuel */
+  .ribwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .ribgrid{display:grid;grid-template-rows:repeat(7,15px);grid-auto-flow:column;grid-auto-columns:15px;gap:2px;width:max-content}
+  .rib{border-radius:2.5px;background:#1a2029;cursor:default}
+  .rowlab{display:grid;grid-template-rows:repeat(7,15px);gap:2px;font-size:9.5px;color:var(--muted);margin-right:6px;width:20px}
+  .rowlab span{line-height:15px}
+  .ribline{display:flex;align-items:flex-start}
+  .months{display:flex;font-size:10px;color:var(--muted);margin:6px 0 0 26px;width:max-content}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:11.5px;color:var(--muted);align-items:center}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2.5px;margin-right:5px;vertical-align:-1px}
+
+  /* tableaux */
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th{background:#0f141c;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:6px 8px;border-bottom:1px solid #1e2531;text-align:right;font-family:var(--mono);white-space:nowrap}
+  td.txt{font-family:inherit;text-align:left}
+  tbody tr:hover{background:#141a23}
+  tfoot td{border-top:2px solid var(--line);border-bottom:none;font-weight:600;color:var(--txt)}
+  .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* barre horaire 24h */
+  .bar24{position:relative;width:150px;height:13px;background:#0b0f15;border:1px solid var(--line);border-radius:3px;display:inline-block;vertical-align:middle}
+  .bar24 .night{position:absolute;top:0;bottom:0;background:#131b2c}
+  .bar24 .seg{position:absolute;top:2px;bottom:2px;border-radius:2px}
+  .bar24 .pz{position:absolute;top:2px;bottom:2px;background:#0b0f15;border-left:1px solid #46536b;border-right:1px solid #46536b}
+
+  /* contrôles légaux */
+  .checks{display:flex;flex-direction:column;gap:8px}
+  .chk-item{border-left:3px solid var(--green);background:var(--greenbg);border-radius:0 7px 7px 0;padding:8px 12px}
+  .chk-item.warn{border-color:var(--amber);background:var(--amberbg)}
+  .chk-item.bad{border-color:var(--red);background:var(--redbg)}
+  .chk-item .t{font-weight:600;font-size:13px}
+  .chk-item .d{font-size:12px;color:var(--muted);margin-top:2px}
+  .chk-item .d b{color:var(--txt);font-family:var(--mono)}
+
+  /* éditeur */
+  .edit table{font-size:12.5px}
+  .edit input{background:#0b0f15;color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:4px 5px;font-family:var(--mono);font-size:12.5px;width:100%;min-width:64px;text-align:right}
+  .edit td{padding:3px 4px}
+  .rotcell{background:#0b0f15;color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:4px;font-family:var(--mono);font-size:12.5px;width:72px;text-align:center}
+  details > summary{cursor:pointer;color:var(--accent);font-size:13px;padding:2px 0;list-style:none}
+  details > summary::-webkit-details-marker{display:none}
+  details > summary::before{content:"▸ ";}
+  details[open] > summary::before{content:"▾ ";}
+  .hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+  .warnbox{border-left:3px solid var(--amber);background:var(--amberbg);border-radius:0 7px 7px 0;padding:9px 12px;font-size:12.5px;margin-top:10px}
+  .warnbox b{color:var(--txt)}
+  footer{color:var(--muted);font-size:11.5px;text-align:center;padding:6px 0 20px}
+
+  /* ====== FAQ ====== */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:70;padding:16px}
+  .modal.show{display:flex}
+  .faqcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:1060px;max-width:100%;height:88vh;display:flex;flex-direction:column;overflow:hidden}
+  .faqhead{background:#0d0e12;border-bottom:1px solid var(--line);padding:11px 16px;display:flex;align-items:center;gap:10px}
+  .faqhead h2{margin:0;font-size:15px;color:var(--accent)}
+  .faqhead .x{margin-left:auto}
+  .faqbody{flex:1;display:flex;min-height:0}
+  .faqnav{width:266px;border-right:1px solid var(--line);overflow:auto;background:#10151d;padding:8px 0;flex:0 0 auto}
+  .faqnav .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:11px 16px 4px}
+  .faqnav a{display:block;padding:7px 16px;color:var(--txt);text-decoration:none;font-size:13px;border-left:3px solid transparent;cursor:pointer}
+  .faqnav a:hover{background:#141a23}
+  .faqnav a.on{border-left-color:var(--accent);background:#15233a;color:#fff}
+  .faqtxt{flex:1;overflow:auto;padding:18px 24px;font-size:13.5px;line-height:1.6}
+  .faqtxt h3{color:#f0c040;font-size:16px;margin:0 0 10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .faqtxt h4{color:var(--blue);font-size:13.5px;margin:18px 0 5px}
+  .faqtxt p{margin:7px 0}
+  .faqtxt ul{margin:7px 0;padding-left:20px}
+  .faqtxt li{margin:4px 0}
+  .faqtxt code{background:#0b0f15;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:var(--mono);font-size:12.5px}
+  .faqtxt table{border-collapse:collapse;width:100%;margin:9px 0;font-size:13px}
+  .faqtxt table td{border:none;border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:normal;font-family:inherit;vertical-align:top}
+  .faqtxt table td:first-child{color:var(--blue);font-weight:600;width:33%;white-space:nowrap}
+  .faqtxt .ref{border-left:3px solid var(--blue);background:var(--bluebg);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0;font-size:12.5px}
+  .faqtxt .att{border-left:3px solid var(--amber);background:var(--amberbg);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0;font-size:12.5px}
+  .faqtxt .ok{border-left:3px solid var(--green);background:var(--greenbg);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0;font-size:12.5px}
+  .faqtxt b.k{color:var(--txt)}
+
+  /* ====== téléphones et tablettes ====== */
+  @media (max-width:860px){
+    header{padding:8px 11px;gap:8px}
+    header h1{font-size:15px}
+    header .sub{flex-basis:100%;order:9;font-size:11px;line-height:1.3}
+    header .spacer{display:none}
+    header button{flex:1 1 auto;padding:9px 10px;font-size:13px}
+    header #btnImport{flex-basis:100%}
+    .importrow{flex-direction:column;gap:8px}
+    .importrow button{width:100%}
+    .drop{padding:13px 11px;font-size:12.5px}
+    .modal{padding:0}
+    .faqcard{width:100vw;height:100vh;max-width:none;border-radius:0}
+    .faqbody{flex-direction:column}
+    .faqnav{width:100%;max-height:33vh;border-right:none;border-bottom:1px solid var(--line)}
+    .faqnav .grp{padding:9px 14px 2px}
+    .faqnav a{padding:9px 14px}
+    .faqtxt{padding:14px 15px;font-size:13.5px}
+    .faqtxt h3{font-size:15px}
+    .faqtxt table td:first-child{width:42%;white-space:normal}
+    main{padding:10px 8px 26px}
+    .card{padding:12px 11px;border-radius:9px}
+    .params{gap:11px}
+    .fld{flex:1 1 132px}
+    .fld input,.fld select{width:100%}
+    .fld input[type=number]{width:100%}
+    .kpis{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+    .kpi{padding:9px 10px}
+    .kpi .v{font-size:18px}
+    .kpi .s{font-size:10.5px}
+    /* le ruban se fait défiler au doigt */
+    .ribgrid{grid-template-rows:repeat(7,13px);grid-auto-columns:13px}
+    .rowlab{grid-template-rows:repeat(7,13px);width:16px;margin-right:4px}
+    .rowlab span{line-height:13px;font-size:9px}
+    .ribmonths span{font-size:9px}
+    table{font-size:12.5px}
+    th,td{padding:6px 7px}
+    .bar24{width:92px}
+    .edit input{min-width:56px}
+    .rotcell{width:60px}
+    .legend{gap:8px;font-size:11px}
+    footer{padding:4px 10px 20px}
+  }
+  @media (max-width:430px){
+    .kpis{grid-template-columns:1fr 1fr}
+    .kpi .v{font-size:17px}
+    .bar24{width:72px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚆 Rotation — calculateur annuel</h1>
+  <span class="sub">Déposez une rotation, obtenez vos compteurs sur l'année · LDT · OLDT · CCT transN</span>
+  <span class="spacer"></span>
+  <button class="primary" id="btnImport">📄 Importer une rotation (PDF)</button>
+  <button id="btnFaq">❓ FAQ</button>
+  <button id="btnCsv">Exporter le détail (CSV)</button>
+  <button id="btnJson">Exporter la rotation (JSON)</button>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>Rotation chargée <span class="note" id="rotSrc">exemple : rotation CDF (planning 04.10.2027 – 10.10.2027)</span></h2>
+    <div class="importrow">
+      <button class="primary big" id="btnImport2">📄 Importer une rotation (PDF)</button>
+      <button id="btnImportAutre">Autre fichier (JSON, image)</button>
+    </div>
+    <input type="file" id="filePdf" accept="application/pdf,.pdf" class="sr-only" tabindex="-1" aria-hidden="true">
+    <input type="file" id="fileAutre" accept=".json,application/json,image/*" class="sr-only" tabindex="-1" aria-hidden="true">
+    <div class="drop" id="drop">
+      <b>Ou glissez le PDF ici</b> depuis votre ordinateur.<br>
+      <span style="font-size:12px">Le tableau est lu directement dans le PDF : dates en en-tête, une ligne par semaine du cycle, et pour chaque tour l'horaire, le temps de travail et le temps de conduite. Un fichier JSON exporté d'ici fonctionne aussi. Une image sert seulement de référence visuelle (les chiffres n'y sont pas lisibles).</span>
+    </div>
+    <div id="importMsg"></div>
+    <img id="refImg" alt="Planning de rotation déposé, affiché en référence">
+  </div>
+
+  <div class="card">
+    <h2>Paramètres</h2>
+    <div class="params">
+      <div class="fld">
+        <label for="annee">Année civile</label>
+        <input type="number" id="annee" value="2027" min="2024" max="2040">
+      </div>
+      <div class="fld">
+        <label for="sem1">Semaine du cycle au 1<sup>er</sup> lundi</label>
+        <select id="sem1"></select>
+      </div>
+      <div class="fld">
+        <label for="vac">Semaines de vacances</label>
+        <input type="number" id="vac" value="0" min="0" max="8">
+      </div>
+      <div class="fld">
+        <label for="compMode">Les jours COMP…</label>
+        <select id="compMode">
+          <option value="debit">débitent le solde (−6 h 50)</option>
+          <option value="neutre">sont des congés planifiés (neutres)</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label>&nbsp;</label>
+        <label class="chk"><input type="checkbox" id="deduirePause" checked> Déduire les pauses connues de l'indemnité nuit</label>
+      </div>
+    </div>
+    <p class="hint">La rotation avance d'une ligne par semaine et reboucle de la semaine 9 à la semaine 1. Les vacances sont retirées du total (semaines entières, réparties sur l'année) — elles ne débitent pas le solde DTA.</p>
+  </div>
+
+  <div class="card">
+    <h2>Si vous suivez cette rotation toute l'année <span class="note" id="anneeLabel"></span></h2>
+    <div class="kpis" id="kpis"></div>
+  </div>
+
+  <div class="card">
+    <h2>L'année en un coup d'œil <span class="note">une case par jour — la couleur indique l'heure de prise de service</span></h2>
+    <div class="ribwrap">
+      <div class="ribline">
+        <div class="rowlab"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+        <div class="ribgrid" id="ribbon"></div>
+      </div>
+      <div class="months" id="ribMonths"></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="card">
+    <h2>Les tours de la rotation <span class="note">valeurs par tour, et cumul sur l'année</span></h2>
+    <div class="tblwrap">
+      <table id="tblTours">
+        <thead><tr>
+          <th>Tour</th><th>Horaire</th><th>Journée (24 h)</th><th>Ampl.</th><th>Travail</th><th>Pause</th>
+          <th>Conduite</th><th>Nuit</th><th>SBN</th><th>×/an</th><th>Travail/an</th><th>Indemn./an</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="pauseWarn"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mois par mois</h2>
+    <div class="tblwrap">
+      <table id="tblMois">
+        <thead><tr>
+          <th>Mois</th><th>Services</th><th>COMP</th><th>Repos</th><th>Travail</th><th>Amplitude</th>
+          <th>Conduite</th><th>DTA</th><th>Nuit (min)</th><th>SBN (min)</th><th>Indemnités</th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Contrôles LDT / OLDT / CCT sur l'année</h2>
+    <div class="checks" id="checks"></div>
+  </div>
+
+  <div class="card edit">
+    <h2>Modifier la rotation</h2>
+    <details>
+      <summary>Grille du cycle (9 semaines × 7 jours)</summary>
+      <p class="hint">Saisissez un numéro de tour, <code>COMP</code> pour un jour de compensation, ou <code>R</code> pour un jour de repos.</p>
+      <div class="tblwrap"><table id="tblRot"><thead><tr>
+        <th>Sem.</th><th>Lundi</th><th>Mardi</th><th>Mercredi</th><th>Jeudi</th><th>Vendredi</th><th>Samedi</th><th>Dimanche</th>
+      </tr></thead><tbody></tbody></table></div>
+    </details>
+    <details style="margin-top:10px">
+      <summary>Horaires et minutages des tours</summary>
+      <p class="hint">Le temps de travail est celui du planning (amplitude moins la pause). L'heure de pause est facultative : elle sert à savoir si la pause tombe dans la plage de nuit 20 h – 6 h.</p>
+      <div class="tblwrap"><table id="tblEditTours"><thead><tr>
+        <th>Tour</th><th>Début</th><th>Fin</th><th>Travail</th><th>Conduite</th><th>Heure de pause</th><th>Lieu de pause</th>
+      </tr></thead><tbody></tbody></table></div>
+    </details>
+    <p style="margin-top:12px"><button class="primary" id="btnApply">Recalculer l'année</button>
+       <button id="btnReset">Rétablir la rotation d'origine</button></p>
+  </div>
+
+  <div class="card">
+    <h2>Comment les totaux sont calculés</h2>
+    <div id="method" style="font-size:12.5px;line-height:1.6;color:var(--muted)"></div>
+  </div>
+
+</main>
+
+<div class="modal" id="faqModal" role="dialog" aria-modal="true" aria-label="Foire aux questions">
+  <div class="faqcard">
+    <div class="faqhead">
+      <h2>❓ FAQ — comment les totaux sont calculés</h2>
+      <button class="x" id="btnFaqClose">✕ Fermer</button>
+    </div>
+    <div class="faqbody">
+      <div class="faqnav" id="faqNav"></div>
+      <div class="faqtxt" id="faqTxt"></div>
+    </div>
+  </div>
+</div>
+
+<footer>Outil indépendant, non affilié à transN — SN@KE SWISS. Les valeurs officielles restent celles de votre attestation transN.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+</script>
+<script>
+/* ===================================================================
+   RÈGLES DE CALCUL — CCT transN (annexes 3 et 4), LDT RS 822.21,
+   OLDT RS 822.211. Identiques à celles du TransN Checker.
+   =================================================================== */
+const Cct = {
+  IndemNuit_CHF_h:5.50, IndemSam_CHF_h:5.50, IndemDim_CHF_h:5.50,
+  IndemNuit_Start:20*60, IndemNuit_End:6*60,
+  SBN_10pct_Start:22*60, SBN_40pct_End:4*60, SBN_40pct_EarlyEnd:5*60,
+  NocturneZone_Start:0, NocturneZone_End:4*60,
+  Amplitude_Max:720, Amplitude_CibleMax:660, TE_Max_Tour:600,
+  Repos_AbsMin:540, Repos_Hebdo:660, Repos_Cible:720, Nuits_Max_28j:15,
+  Rcomp_Duree:410, Norme_Journaliere:480,
+  FeriesFixesNE:new Set(["01-01","01-02","03-01","05-01","08-01","12-25","12-26"]),
+
+  amplitude(s,e){ if(e<=s)e+=1440; return e-s; },
+  roundQH(m){ return Math.ceil(m/15)*15; },
+  minutesNuitOnly(s,e){ if(e<=s)e+=1440; let c=0;
+    for(let i=s;i<e;i++){const x=i%1440; if(x>=this.IndemNuit_Start||x<this.IndemNuit_End)c++;} return c; },
+  minutesSam(s,e){ if(e<=s)e+=1440; let c=0;
+    for(let i=s;i<e;i++){const x=i%1440; if(x>=12*60&&x<20*60)c++;} return c; },
+  minutesDim(s,e){ if(e<=s)e+=1440; let c=0;
+    for(let i=s;i<e;i++){const x=i%1440; if(x>=6*60&&x<20*60)c++;} return c; },
+  sbnMinutes(s,e){ if(e<=s)e+=1440; const early=s<this.SBN_40pct_End; let b=0;
+    for(let i=s;i<e;i++){const x=i%1440;
+      if(x>=this.SBN_10pct_Start)b+=0.10; else if(x<this.SBN_40pct_End)b+=0.40;
+      else if(early&&x>=this.SBN_40pct_End&&x<this.SBN_40pct_EarlyEnd)b+=0.40;} return Math.round(b); },
+  sbnChf(s,e){ if(e<=s)e+=1440; const early=s<this.SBN_40pct_End; let c=0;
+    for(let i=s;i<e;i++){const x=i%1440;
+      if(x>=this.SBN_10pct_Start)c+=0.10; else if(x<this.SBN_40pct_End)c+=0.40;
+      else if(early&&x>=this.SBN_40pct_End&&x<this.SBN_40pct_EarlyEnd)c+=0.40;} return Math.round(c*100)/100; },
+  estNocturne(s,e){ if(e<=s)e+=1440;
+    for(let i=s;i<e;i++){const x=i%1440; if(x>=this.NocturneZone_Start&&x<this.NocturneZone_End)return true;} return false; },
+
+  _mob:{},
+  feriesMobiles(y){
+    if(this._mob[y])return this._mob[y];
+    const a=y%19,b=Math.floor(y/100),cc=y%100,d2=Math.floor(b/4),e=b%4,
+          ff=Math.floor((b+8)/25),g=Math.floor((b-ff+1)/3);
+    const h=(19*a+b-d2-g+15)%30,ii=Math.floor(cc/4),k=cc%4,
+          l=(32+2*e+2*ii-h-k)%7,mm=Math.floor((a+11*h+22*l)/451);
+    const mo=Math.floor((h+l-7*mm+114)/31), dy=((h+l-7*mm+114)%31)+1;
+    const paq=new Date(y,mo-1,dy), set=new Set();
+    const off=(base,n)=>{const x=new Date(base);x.setDate(x.getDate()+n);return x;};
+    [-2,1,39,50].forEach(n=>set.add(off(paq,n).toDateString()));
+    const sept1=new Date(y,8,1), toSun=((0-sept1.getDay())+7)%7, jf=off(sept1,toSun+14);
+    set.add(jf.toDateString()); set.add(off(jf,1).toDateString());
+    this._mob[y]=set; return set;
+  },
+  estFerie(d){
+    const mm=String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    return this.FeriesFixesNE.has(mm) || this.feriesMobiles(d.getFullYear()).has(d.toDateString());
+  },
+  estDimOuFerie(d){ return d.getDay()===0 || this.estFerie(d); },
+
+  minToHHMM(m){ const s=m<0?"-":"", a=Math.abs(Math.round(m));
+    return s+Math.floor(a/60)+"h"+String(a%60).padStart(2,"0"); },
+  minToHeures(m){ const s=m<0?"-":"", a=Math.abs(Math.round(m));
+    return s+Math.floor(a/60).toLocaleString("fr-CH")+" h "+String(a%60).padStart(2,"0"); }
+};
+
+/* ===================================================================
+   ROTATION CDF — relevée sur le planning du 04.10.2027 au 10.10.2027.
+   9 lignes = les 9 positions du cycle ; un mécanicien descend d'une
+   ligne par semaine et repasse de la 9 à la 1.
+   =================================================================== */
+const ROT_DEFAUT = [
+  ["1203","COMP","1201","1202","1203","COMP","R"   ],
+  ["1205","1206","1207","R"   ,"1201","1252","1251"],
+  ["1202","1203","1204","COMP","COMP","R"   ,"1253"],
+  ["1204","1204","1205","1207","R"   ,"1255","1254"],
+  ["1207","1205","COMP","1205","1206","COMP","R"   ],
+  ["1201","1202","1203","1204","1205","1253","R"   ],
+  ["COMP","R"   ,"1206","1206","1207","1254","1255"],
+  ["COMP","1201","1202","1203","1204","COMP","R"   ],
+  ["1206","1207","R"   ,"1201","1202","1251","1252"]
+];
+
+/* Tours : début, fin, temps de travail et temps de conduite du planning.
+   pause = heure de début de la collation quand elle est connue. */
+const TOURS_DEFAUT = {
+  "1201":{deb:"18:13", fin:"01:11", tt:388, cond:256, pause:"21:08", lieu:"Bienne"},
+  "1202":{deb:"15:13", fin:"00:09", tt:503, cond:201, pause:"20:19", lieu:"Neuchâtel"},
+  "1203":{deb:"12:14", fin:"19:56", tt:462, cond:263, pause:"",      lieu:""},
+  "1204":{deb:"10:13", fin:"18:00", tt:430, cond:139, pause:"",      lieu:""},
+  "1205":{deb:"06:19", fin:"15:34", tt:513, cond:247, pause:"",      lieu:""},
+  "1206":{deb:"04:20", fin:"13:36", tt:523, cond:358, pause:"",      lieu:""},
+  "1207":{deb:"04:06", fin:"10:34", tt:358, cond:191, pause:"",      lieu:""},
+  "1251":{deb:"15:13", fin:"01:12", tt:549, cond:286, pause:"",      lieu:""},
+  "1252":{deb:"14:20", fin:"00:21", tt:571, cond:295, pause:"",      lieu:""},
+  "1253":{deb:"05:19", fin:"15:37", tt:588, cond:245, pause:"",      lieu:""},
+  "1254":{deb:"05:13", fin:"15:10", tt:533, cond:273, pause:"",      lieu:""},
+  "1255":{deb:"04:00", fin:"13:30", tt:534, cond:295, pause:"",      lieu:""}
+};
+
+let ROT = JSON.parse(JSON.stringify(ROT_DEFAUT));
+let TOURS = JSON.parse(JSON.stringify(TOURS_DEFAUT));
+
+/* ================= utilitaires ================= */
+const $=id=>document.getElementById(id);
+const JOURS=["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+const MOIS=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+function toMin(hhmm){ if(!hhmm)return null; const p=String(hhmm).split(":"); if(p.length<2)return null;
+  const h=+p[0], m=+p[1]; if(isNaN(h)||isNaN(m))return null; return h*60+m; }
+function hhmm(min){ const m=((min%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
+function chf(v){ return v.toLocaleString("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function nb(v){ return Math.round(v).toLocaleString("fr-CH"); }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function estTour(code){ return /^\d/.test(String(code||"").trim()); }
+function typeJour(code){ const c=String(code||"").trim().toUpperCase();
+  if(c==="R"||c==="REPOS")return "repos"; if(c==="COMP")return "comp"; if(estTour(c))return "tour"; return "vide"; }
+
+/* couleur = heure de prise de service (le rythme du mécanicien) */
+function couleurTour(debMin){
+  if(debMin<5*60)  return "#e8913a";
+  if(debMin<8*60)  return "#d4c33f";
+  if(debMin<12*60) return "#57b8e0";
+  if(debMin<15*60) return "#4a8ede";
+  if(debMin<19*60) return "#9a72d6";
+  return "#6355c9";
+}
+const COUL_COMP="#2b6640", COUL_REPOS="#4a2632", COUL_VAC="#3a4250";
+
+/* ================= calcul de l'année ================= */
+function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite){
+  const jours=[];
+  const d=new Date(annee,0,1);
+  // premier lundi de l'année
+  const premierLundi=new Date(annee,0,1);
+  while(premierLundi.getDay()!==1) premierLundi.setDate(premierLundi.getDate()+1);
+
+  // semaines de vacances : réparties régulièrement sur l'année (semaines ISO du calcul)
+  const totalSemaines=Math.ceil((new Date(annee,11,31)-premierLundi)/(7*86400000))+1;
+  const semVac=new Set();
+  if(semVacances>0){ const pas=totalSemaines/(semVacances+1);
+    for(let i=1;i<=semVacances;i++) semVac.add(Math.round(i*pas)); }
+
+  const fin=new Date(annee,11,31);
+  let prevFinAbs=null; // fin du dernier service, en minutes absolues depuis le 1er janvier
+  for(let cur=new Date(annee,0,1); cur<=fin; cur.setDate(cur.getDate()+1)){
+    const date=new Date(cur);
+    const dow=(date.getDay()+6)%7;
+    const dayIndex=Math.round((date-new Date(annee,0,1))/86400000);
+
+    // position dans le cycle
+    const semIdx=Math.floor((date-premierLundi)/(7*86400000));
+    const semAbs=Math.floor((date-premierLundi)/(7*86400000)); // peut être négatif avant le 1er lundi
+    const cycle=ROT.length||1;
+    const pos=(((semDepart-1+semAbs)%cycle)+cycle)%cycle;
+    const enVacances=semVac.has(semAbs);
+
+    const code=enVacances ? "VAC" : ROT[pos][dow];
+    const j={date, dow, dayIndex, semaineCycle:pos+1, code, type:enVacances?"vacances":typeJour(code),
+             estDimFerie:Cct.estDimOuFerie(date), estSamedi:date.getDay()===6, estFerie:Cct.estFerie(date)};
+
+    if(j.type==="tour"){
+      const t=TOURS[code];
+      if(!t){ j.type="inconnu"; jours.push(j); continue; }
+      const s=toMin(t.deb), e=toMin(t.fin);
+      j.debMin=s; j.finMin=e;
+      j.ampl=Cct.amplitude(s,e);
+      j.tt=t.tt;
+      j.pauseDuree=Math.max(0,j.ampl-t.tt);
+      j.cond=t.cond;
+      j.dta=t.tt-Cct.Rcomp_Duree;
+
+      // indemnité nuit : plage 20h–6h, moins la pause si son heure est connue et qu'elle y tombe
+      let nuitBrut=Cct.minutesNuitOnly(s,e);
+      let deduit=0;
+      const ps=toMin(t.pause);
+      if(deduirePause && ps!=null && j.pauseDuree>0){
+        for(let i=ps;i<ps+j.pauseDuree;i++){ const x=((i%1440)+1440)%1440;
+          if(x>=Cct.IndemNuit_Start||x<Cct.IndemNuit_End) deduit++; }
+      }
+      j.pauseConnue = ps!=null;
+      j.nuitMin=Cct.roundQH(Math.max(0,nuitBrut-deduit));
+      j.nuitDeduit=deduit;
+      j.indNuitChf=j.nuitMin/60*Cct.IndemNuit_CHF_h;
+
+      j.samMin = j.estSamedi ? Cct.minutesSam(s,e) : 0;
+      j.dimMin = j.estDimFerie ? Cct.minutesDim(s,e) : 0;
+      j.indSamChf=j.samMin/60*Cct.IndemSam_CHF_h;
+      j.indDimChf=j.dimMin/60*Cct.IndemDim_CHF_h;
+
+      j.sbnMin=Cct.sbnMinutes(s,e);
+      j.sbnChf=Cct.sbnChf(s,e);
+      j.nocturne=Cct.estNocturne(s,e);
+      j.indTotalChf=j.indNuitChf+j.indSamChf+j.indDimChf+j.sbnChf;
+
+      // repos avant ce service
+      const debAbs=dayIndex*1440+s;
+      if(prevFinAbs!=null) j.repos=debAbs-prevFinAbs;
+      let finAbs=dayIndex*1440+e; if(e<=s) finAbs+=1440;
+      prevFinAbs=finAbs;
+    } else if(j.type==="comp"){
+      j.dta = (compDebite===false) ? 0 : -Cct.Rcomp_Duree;
+    }
+    jours.push(j);
+  }
+  return jours;
+}
+
+/* ================= agrégations ================= */
+function agreger(jours){
+  const t={services:0,comp:0,repos:0,vacances:0,tt:0,ampl:0,cond:0,dta:0,pause:0,
+           nuitMin:0,samMin:0,dimMin:0,sbnMin:0,
+           indNuit:0,indSam:0,indDim:0,sbnChf:0,
+           nuitsNocturnes:0,samediTrav:0,dimancheTrav:0,ferieTrav:0,
+           parTour:{}, parMois:Array.from({length:12},()=>({services:0,comp:0,repos:0,tt:0,ampl:0,cond:0,dta:0,nuitMin:0,sbnMin:0,ind:0}))};
+  for(const j of jours){
+    const m=j.date.getMonth(), M=t.parMois[m];
+    if(j.type==="tour"){
+      t.services++; M.services++;
+      t.tt+=j.tt; t.ampl+=j.ampl; t.cond+=j.cond; t.dta+=j.dta; t.pause+=j.pauseDuree;
+      t.nuitMin+=j.nuitMin; t.samMin+=j.samMin; t.dimMin+=j.dimMin; t.sbnMin+=j.sbnMin;
+      t.indNuit+=j.indNuitChf; t.indSam+=j.indSamChf; t.indDim+=j.indDimChf; t.sbnChf+=j.sbnChf;
+      if(j.nocturne)t.nuitsNocturnes++;
+      if(j.estSamedi)t.samediTrav++;
+      if(j.date.getDay()===0)t.dimancheTrav++;
+      if(j.estFerie)t.ferieTrav++;
+      M.tt+=j.tt; M.ampl+=j.ampl; M.cond+=j.cond; M.dta+=j.dta; M.nuitMin+=j.nuitMin; M.sbnMin+=j.sbnMin;
+      M.ind+=j.indTotalChf;
+      const p=t.parTour[j.code]||(t.parTour[j.code]={n:0,tt:0,ind:0});
+      p.n++; p.tt+=j.tt; p.ind+=j.indTotalChf;
+    } else if(j.type==="comp"){ t.comp++; M.comp++; t.dta+=j.dta; M.dta+=j.dta; }
+    else if(j.type==="repos"){ t.repos++; M.repos++; }
+    else if(j.type==="vacances"){ t.vacances++; }
+  }
+  t.indTotal=t.indNuit+t.indSam+t.indDim+t.sbnChf;
+  return t;
+}
+
+/* contrôles légaux sur l'année */
+function controles(jours){
+  const r=[];
+  const tours=jours.filter(j=>j.type==="tour");
+
+  // repos entre services
+  let r8=0,r9=0,r11=0,r12=0,minRepos=null,minReposDate=null;
+  for(const j of tours){
+    if(j.repos==null)continue;
+    if(minRepos==null||j.repos<minRepos){minRepos=j.repos;minReposDate=j.date;}
+    if(j.repos<480)r8++;
+    else if(j.repos<Cct.Repos_AbsMin)r9++;
+    else if(j.repos<Cct.Repos_Hebdo)r11++;
+    else if(j.repos<Cct.Repos_Cible)r12++;
+  }
+  r.push({niveau:r8>0?"bad":(r9>0?"warn":"ok"), titre:"Repos entre deux services",
+    detail:`Repos le plus court de l'année : <b>${minRepos!=null?Cct.minToHHMM(minRepos):"—"}</b>`+
+      (minReposDate?` (${minReposDate.toLocaleDateString("fr-CH")})`:"")+
+      `. Sous 12 h : <b>${r12+r11+r9+r8}</b> fois — dont <b>${r11}</b> entre 11 h et 9 h, <b>${r9}</b> sous 9 h, <b>${r8}</b> sous 8 h.`+
+      (r8>0?" Un repos inférieur à 8 h n'est admis qu'en cas de force majeure (OLDT art. 18)."
+           :(r9>0?" Une réduction sous 9 h demande une convention (OLDT art. 18 al. 2)."
+                 :" Conforme aux paliers LDT art. 8 / OLDT art. 18."))});
+
+  // amplitude
+  const ampMax=tours.reduce((a,j)=>Math.max(a,j.ampl),0);
+  const amp12=tours.filter(j=>j.ampl>Cct.Amplitude_Max).length;
+  const amp11=tours.filter(j=>j.ampl>Cct.Amplitude_CibleMax&&j.ampl<=Cct.Amplitude_Max).length;
+  r.push({niveau:amp12>0?"bad":(amp11>0?"warn":"ok"), titre:"Amplitude des tours",
+    detail:`Amplitude maximale de la rotation : <b>${Cct.minToHHMM(ampMax)}</b>. Au-dessus de 11 h : <b>${amp11}</b> tours par an ; au-dessus de 12 h : <b>${amp12}</b>.`+
+      (amp12>0?" Le maximum légal de 12 h (LDT art. 6) est dépassé.":" Le maximum légal de 12 h est respecté.")});
+
+  // temps de travail effectif
+  const te10=tours.filter(j=>j.tt>Cct.TE_Max_Tour).length;
+  const teMax=tours.reduce((a,j)=>Math.max(a,j.tt),0);
+  r.push({niveau:te10>0?"warn":"ok", titre:"Temps de travail par service",
+    detail:`Service le plus long : <b>${Cct.minToHHMM(teMax)}</b> de travail effectif. Au-dessus de 10 h : <b>${te10}</b> fois par an.`+
+      (te10>0?" Au-delà de 10 h, LDT art. 4 al. 3 exige une justification (formation, déplacement).":" Sous la limite de 10 h.")});
+
+  // jours consécutifs
+  let suite=0,maxSuite=0,depart=null,maxDepart=null;
+  for(const j of jours){
+    if(j.type==="tour"){ if(suite===0)depart=j.date; suite++; if(suite>maxSuite){maxSuite=suite;maxDepart=depart;} }
+    else suite=0;
+  }
+  r.push({niveau:maxSuite>13?"bad":"ok", titre:"Jours de service consécutifs",
+    detail:`Série la plus longue : <b>${maxSuite}</b> jours`+(maxDepart?` (à partir du ${maxDepart.toLocaleDateString("fr-CH")})`:"")+
+      `. Maximum admis : 13 jours entre deux jours de repos (OLDT art. 20 al. 2).`});
+
+  // nuits consécutives et par 28 jours
+  let ns=0,maxNs=0;
+  for(const j of jours){ if(j.type==="tour"&&j.nocturne){ns++; if(ns>maxNs)maxNs=ns;} else if(j.type!=="tour"||!j.nocturne)ns=0; }
+  let max28=0,pire=null;
+  const nocturnes=jours.map(j=>(j.type==="tour"&&j.nocturne)?1:0);
+  for(let i=0;i+28<=nocturnes.length;i++){
+    const s=nocturnes.slice(i,i+28).reduce((a,b)=>a+b,0);
+    if(s>max28){max28=s;pire=jours[i].date;}
+  }
+  r.push({niveau:max28>Cct.Nuits_Max_28j?"bad":(maxNs>7?"bad":"ok"), titre:"Services de nuit (0 h – 4 h)",
+    detail:`Total sur l'année : <b>${nocturnes.reduce((a,b)=>a+b,0)}</b> services touchant la plage 0 h – 4 h. `+
+      `Maximum sur 28 jours glissants : <b>${max28}</b> (limite 15, LDT art. 9 al. 3)`+(pire?`, période commençant le ${pire.toLocaleDateString("fr-CH")}`:"")+
+      `. Plus longue série consécutive : <b>${maxNs}</b> (limite 7).`});
+
+  // dimanches — comptage neutre, sans seuil : le minimum figure dans la LDT et la CCT
+  const dimTrav=jours.filter(j=>j.type==="tour"&&j.date.getDay()===0).length;
+  const dimLibres=jours.filter(j=>j.date.getDay()===0&&j.type!=="tour").length;
+  r.push({niveau:"ok", titre:"Dimanches",
+    detail:`<b>${dimTrav}</b> dimanches travaillés et <b>${dimLibres}</b> dimanches libres sur l'année, `+
+      `soit un dimanche de repos toutes les <b>${dimLibres?(52/dimLibres).toFixed(1):"—"}</b> semaines en moyenne. `+
+      `Le nombre minimal de dimanches de repos est fixé par la LDT (art. 11) et la CCT — à confronter au texte, cet outil ne l'applique pas.`});
+
+  // équilibre de la rotation : les compensations résorbent-elles ce que les services accumulent ?
+  const dtaServices=tours.reduce((a,j)=>a+j.dta,0);
+  const nbComp=jours.filter(j=>j.type==="comp").length;
+  const compDebite=jours.some(j=>j.type==="comp"&&j.dta!==0);
+  const sbnTotal=tours.reduce((a,j)=>a+(j.sbnMin||0),0);
+  const compParSbn=Math.floor(sbnTotal/Cct.Rcomp_Duree);
+  const soldeDebit=dtaServices-nbComp*Cct.Rcomp_Duree;
+  const soldeAvecSbn=soldeDebit+compParSbn*Cct.Rcomp_Duree;
+  const compFinancables=dtaServices/Cct.Rcomp_Duree;
+  r.push({niveau:"ok", titre:"Équilibre du solde DTA",
+    detail:`Les <b>${tours.length}</b> services accumulent <b>+${Cct.minToHHMM(dtaServices)}</b> au-dessus de la norme de 6 h 50, `+
+      `soit de quoi financer <b>${compFinancables.toFixed(1)}</b> jours de compensation. La rotation en prévoit <b>${nbComp}</b>.<br>`+
+      `• Si chaque jour COMP débite le solde : <b>${soldeDebit>=0?"+":""}${Cct.minToHHMM(soldeDebit)}</b> sur l'année.<br>`+
+      `• Si <b>${compParSbn}</b> d'entre eux sont pris en compensation de la bonification nuit (ComSBN, ${Cct.minToHHMM(sbnTotal)} disponibles) : `+
+      `<b>${soldeAvecSbn>=0?"+":""}${Cct.minToHHMM(soldeAvecSbn)}</b>.<br>`+
+      `• Si les jours COMP sont des congés planifiés qui ne touchent pas le compteur : <b>+${Cct.minToHHMM(dtaServices)}</b>.<br>`+
+      `Le mode retenu ci-dessus est « ${compDebite?"les COMP débitent le solde":"les COMP sont neutres"} ». `+
+      `Sur une attestation réelle, le solde dépend aussi des remplacements, des heures supplémentaires, des vacances et des absences — `+
+      `que la rotation seule ne contient pas. Les bornes de la CCT (art. 43) sont de +72 h 00 et −41 h 00.`});
+
+  return r;
+}
+
+/* ===================================================================
+   LECTURE D'UN PDF DE ROTATION
+   Le tableau est repéré par sa géométrie : les dates de l'en-tête
+   donnent les colonnes (les jours), les numéros à gauche donnent les
+   lignes (les semaines du cycle). Dans chaque cellule, la valeur de
+   gauche est l'heure de prise puis le repos ; celles de droite sont
+   l'heure de fin, le temps de travail et le temps de conduite.
+   =================================================================== */
+const RE_DATE=/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/;
+const RE_HEURE=/^\d{1,2}:\d{2}$/;
+const RE_TOUR=/^\d{3,4}$/;
+
+/* Heures de pause relevées sur le terrain, appliquées si le tour est reconnu.
+   Elles servent à savoir si la pause tombe dans la plage de nuit 20 h – 6 h. */
+const PAUSES_CONNUES={ "1201":{h:"21:08",lieu:"Bienne"}, "1202":{h:"20:19",lieu:"Neuchâtel"} };
+
+async function motsDuPdf(file){
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const mots=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1});
+    const tc=await page.getTextContent();
+    const brut=[];
+    for(const it of tc.items){
+      const t=(it.str||"").trim(); if(!t)continue;
+      const x=it.transform[4], y=vp.height-it.transform[5];
+      brut.push({t, x0:x, x1:x+(it.width||t.length*4), y:y+(p-1)*10000});
+    }
+    brut.sort((a,b)=>a.y-b.y||a.x0-b.x0);
+    for(const w of brut){
+      const l=mots[mots.length-1];
+      if(l && Math.abs(w.y-l.y)<3 && (w.x0-l.x1)>-3 && (w.x0-l.x1)<1.5){ l.t+=w.t; l.x1=w.x1; }
+      else mots.push({...w});
+    }
+  }
+  return mots;
+}
+
+function lireRotation(mots){
+  const dates=mots.filter(w=>RE_DATE.test(w.t)).sort((a,b)=>a.x0-b.x0);
+  if(dates.length<2) throw new Error("aucun en-tête de dates reconnu dans ce PDF");
+  const cols=[];
+  for(const w of dates){
+    const cx=(w.x0+w.x1)/2;
+    if(!cols.length || Math.abs(cx-cols[cols.length-1].cx)>20) cols.push({cx, label:w.t});
+  }
+  if(cols.length<2) throw new Error("colonnes de jours non identifiables");
+  const yEntete=Math.max.apply(null,dates.map(w=>w.y));
+  const bornes=cols.map((c,i)=>[
+    i===0 ? -Infinity : (cols[i-1].cx+c.cx)/2,
+    i===cols.length-1 ? Infinity : (c.cx+cols[i+1].cx)/2
+  ]);
+  const largeur=cols.length>1 ? cols[1].cx-cols[0].cx : 100;
+  const bordGauche=cols[0].cx-largeur/2;
+
+  const nums=mots.filter(w=>/^\d{1,2}$/.test(w.t) && w.x1<bordGauche && w.y>yEntete)
+                 .sort((a,b)=>a.y-b.y);
+  if(nums.length<2) throw new Error("numéros de semaine non trouvés à gauche du tableau");
+  const ys=nums.map(n=>n.y);
+  const pas=(ys[ys.length-1]-ys[0])/(ys.length-1);
+  const seuils=[Math.max(yEntete+4, ys[0]-pas/2)];
+  for(let i=0;i<ys.length-1;i++) seuils.push((ys[i]+ys[i+1])/2);
+  seuils.push(ys[ys.length-1]+pas/2);
+  const ligneDe=y=>{
+    if(y<seuils[0]||y>seuils[seuils.length-1])return null;
+    for(let i=0;i<ys.length;i++) if(y>=seuils[i]&&y<seuils[i+1])return i;
+    return null;
+  };
+  const colonneDe=x=>{ for(let i=0;i<bornes.length;i++) if(x>=bornes[i][0]&&x<bornes[i][1])return i; return null; };
+
+  const cells={};
+  for(const w of mots){
+    if(w.y<=yEntete+4 || w.x1<bordGauche) continue;
+    const r=ligneDe(w.y); if(r===null)continue;
+    const c=colonneDe((w.x0+w.x1)/2); if(c===null)continue;
+    (cells[r+"|"+c]||(cells[r+"|"+c]=[])).push(w);
+  }
+
+  const rot=[], tours={};
+  const enMin=s=>{ const p=s.split(":"); return (+p[0])*60+(+p[1]); };
+  for(let r=0;r<ys.length;r++){
+    const ligne=[];
+    for(let c=0;c<cols.length;c++){
+      const ws=(cells[r+"|"+c]||[]).slice().sort((a,b)=>a.y-b.y||a.x0-b.x0);
+      if(!ws.length){ ligne.push(""); continue; }
+      const txt=ws.map(w=>w.t).join(" ").toUpperCase();
+      if(txt.indexOf("REPOS")>=0){ ligne.push("R"); continue; }
+      if(txt.indexOf("COMP")>=0){ ligne.push("COMP"); continue; }
+      const wt=ws.find(w=>RE_TOUR.test(w.t));
+      const heures=ws.filter(w=>RE_HEURE.test(w.t));
+      if(!wt||heures.length<2){ ligne.push(""); continue; }
+      const code=wt.t; ligne.push(code);
+      if(tours[code]) continue;
+      const axe=(wt.x0+wt.x1)/2;
+      const haut=heures.filter(w=>Math.abs(w.y-wt.y)<=6).sort((a,b)=>a.x0-b.x0);
+      const bas=heures.filter(w=>Math.abs(w.y-wt.y)>6);
+      const droite=bas.filter(w=>(w.x0+w.x1)/2>=axe).sort((a,b)=>a.y-b.y);
+      if(haut.length<2) continue;
+      const deb=haut[0].t, finBrut=haut[haut.length-1].t;
+      const rec={ deb:hhmm(enMin(deb)), fin:hhmm(enMin(finBrut)),
+                  tt:droite[0]?enMin(droite[0].t):null,
+                  cond:droite[1]?enMin(droite[1].t):0,
+                  pause:"", lieu:"" };
+      if(rec.tt==null||rec.tt<=0) rec.tt=Cct.amplitude(enMin(deb),enMin(finBrut));
+      const p=PAUSES_CONNUES[code];
+      if(p && Cct.amplitude(enMin(deb),enMin(finBrut))-rec.tt>0){ rec.pause=p.h; rec.lieu=p.lieu; }
+      tours[code]=rec;
+    }
+    rot.push(ligne);
+  }
+  if(!rot.flat().filter(c=>RE_TOUR.test(c)).length) throw new Error("aucun tour de service trouvé dans le tableau");
+  return {rot, tours, colonnes:cols.map(c=>c.label)};
+}
+
+/* ================= rendu ================= */
+let JOURS_CACHE=[], TOT_CACHE=null;
+
+function rendre(){
+  const annee=+$("annee").value||2027;
+  const semDepart=+$("sem1").value||1;
+  const vac=+$("vac").value||0;
+  const deduire=$("deduirePause").checked;
+  const compDebite=$("compMode").value!=="neutre";
+
+  const jours=calculerAnnee(annee,semDepart,vac,deduire,compDebite);
+  const t=agreger(jours);
+  JOURS_CACHE=jours; TOT_CACHE=t;
+
+  $("anneeLabel").textContent=`${annee} · ${jours.length} jours · cycle démarré en semaine ${semDepart}`;
+
+  /* KPI */
+  const heuresNorme=t.services*Cct.Rcomp_Duree;
+  $("kpis").innerHTML=[
+    kpi("Jours de service", nb(t.services), `${t.comp} compensations · ${t.repos} repos`+(t.vacances?` · ${t.vacances} j. vacances`:"")),
+    kpi("Temps de travail", Cct.minToHeures(t.tt), `moyenne ${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service`,"info"),
+    kpi("Amplitude cumulée", Cct.minToHeures(t.ampl), `dont ${Cct.minToHeures(t.pause)} de pauses`),
+    kpi("Temps de conduite", Cct.minToHeures(t.cond), `${t.tt?Math.round(t.cond/t.tt*100):0} % du temps de travail`),
+    kpi("Solde DTA", (t.dta>0?"+":"")+Cct.minToHeures(t.dta),
+        (compDebite?"travail − 6 h 50 par jour d'affectation, compensations comprises":"travail − 6 h 50 par service, compensations neutres")
+        +" — voir « Équilibre du solde DTA »", t.dta>=0?"good":"info"),
+    kpi("Indemnités", chf(t.indTotal)+" CHF", `nuit ${chf(t.indNuit)} · sam ${chf(t.indSam)} · dim ${chf(t.indDim)} · SBN ${chf(t.sbnChf)}`,"good"),
+    kpi("Bonification nuit", Cct.minToHeures(t.sbnMin), `${chf(t.sbnChf)} CHF · ${(t.sbnMin/410).toFixed(2)} jours de congé`,"info"),
+    kpi("Services de nuit", nb(t.nuitsNocturnes), `touchant la plage 0 h – 4 h`, t.nuitsNocturnes>140?"warn":""),
+    kpi("Week-ends travaillés", nb(t.samediTrav+t.dimancheTrav), `${t.samediTrav} samedis · ${t.dimancheTrav} dimanches · ${t.ferieTrav} fériés`),
+    kpi("Indemnité nuit", Cct.minToHeures(t.nuitMin), `plage 20 h – 6 h · ${chf(t.indNuit)} CHF`)
+  ].join("");
+
+  rendreRuban(jours);
+  rendreTours(t,jours);
+  rendreMois(t);
+  rendreControles(jours);
+  rendreMethode(t,deduire);
+}
+
+function kpi(k,v,s,cls){ return `<div class="kpi ${cls||""}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="s">${s}</div></div>`; }
+
+function rendreRuban(jours){
+  const rib=$("ribbon"); rib.innerHTML="";
+  const premier=jours[0].date, decal=(premier.getDay()+6)%7;
+  for(let i=0;i<decal;i++){ const c=document.createElement("div"); c.className="rib"; c.style.background="transparent"; rib.appendChild(c); }
+  for(const j of jours){
+    const c=document.createElement("div"); c.className="rib";
+    let bg="#1a2029", info="";
+    if(j.type==="tour"){ bg=couleurTour(j.debMin);
+      info=`Tour ${j.code} · ${hhmm(j.debMin)}–${hhmm(j.finMin)} · travail ${Cct.minToHHMM(j.tt)}`+
+           (j.repos!=null?` · repos avant ${Cct.minToHHMM(j.repos)}`:""); }
+    else if(j.type==="comp"){ bg=COUL_COMP; info="Jour de compensation"; }
+    else if(j.type==="repos"){ bg=COUL_REPOS; info="Jour de repos"; }
+    else if(j.type==="vacances"){ bg=COUL_VAC; info="Vacances"; }
+    c.style.background=bg;
+    if(j.estFerie) c.style.boxShadow="inset 0 0 0 1.5px #f0c040";
+    c.title=`${j.date.toLocaleDateString("fr-CH",{weekday:"short",day:"2-digit",month:"short"})} · semaine ${j.semaineCycle} du cycle\n${info}`+(j.estFerie?"\nJour férié":"");
+    rib.appendChild(c);
+  }
+  // repères de mois, alignés sur les colonnes du ruban
+  const mdiv=$("ribMonths"); mdiv.innerHTML="";
+  mdiv.style.display="grid";
+  mdiv.style.gridAutoColumns="17px";
+  mdiv.style.gridAutoFlow="column";
+  const annee=jours[0].date.getFullYear();
+  for(let m=0;m<12;m++){
+    const idx=Math.round((new Date(annee,m,1)-jours[0].date)/86400000);
+    const col=Math.floor((idx+decal)/7)+1;
+    const span=document.createElement("span");
+    span.textContent=MOIS[m].slice(0,3);
+    span.style.gridColumn=col+" / span 4";
+    span.style.gridRow="1";
+    mdiv.appendChild(span);
+  }
+  $("legend").innerHTML=
+    `<span><i style="background:#e8913a"></i>prise avant 5 h</span>`+
+    `<span><i style="background:#d4c33f"></i>5 h – 8 h</span>`+
+    `<span><i style="background:#57b8e0"></i>8 h – 12 h</span>`+
+    `<span><i style="background:#4a8ede"></i>12 h – 15 h</span>`+
+    `<span><i style="background:#9a72d6"></i>15 h – 19 h</span>`+
+    `<span><i style="background:#6355c9"></i>après 19 h</span>`+
+    `<span><i style="background:${COUL_COMP}"></i>compensation</span>`+
+    `<span><i style="background:${COUL_REPOS}"></i>repos</span>`+
+    `<span><i style="box-shadow:inset 0 0 0 1.5px #f0c040;background:#1a2029"></i>jour férié</span>`;
+}
+
+function bar24(s,e,pauseDeb,pauseDuree){
+  const pct=m=>(m/1440*100);
+  let html=`<span class="bar24"><span class="night" style="left:0;width:${pct(360)}%"></span>`+
+           `<span class="night" style="left:${pct(1200)}%;right:0"></span>`;
+  const col=couleurTour(s);
+  if(e>s){ html+=`<span class="seg" style="left:${pct(s)}%;width:${pct(e-s)}%;background:${col}"></span>`; }
+  else{ html+=`<span class="seg" style="left:${pct(s)}%;right:0;background:${col}"></span>`+
+              `<span class="seg" style="left:0;width:${pct(e)}%;background:${col}"></span>`; }
+  if(pauseDeb!=null&&pauseDuree>0){ html+=`<span class="pz" style="left:${pct(pauseDeb)}%;width:${pct(pauseDuree)}%"></span>`; }
+  return html+"</span>";
+}
+
+function rendreTours(t,jours){
+  const tb=$("tblTours").querySelector("tbody"); tb.innerHTML="";
+  const codes=Object.keys(TOURS).filter(c=>t.parTour[c]).sort();
+  let sansPause=[];
+  for(const c of codes){
+    const T=TOURS[c], s=toMin(T.deb), e=toMin(T.fin), ampl=Cct.amplitude(s,e), pause=Math.max(0,ampl-T.tt);
+    const ex=jours.find(j=>j.code===c&&j.type==="tour");
+    const p=t.parTour[c];
+    if(pause>0 && toMin(T.pause)==null && Cct.minutesNuitOnly(s,e)>0) sansPause.push(c);
+    tb.innerHTML+=`<tr>
+      <td class="txt"><b>${esc(c)}</b></td>
+      <td>${esc(T.deb)} → ${esc(T.fin)}</td>
+      <td style="text-align:left">${bar24(s,e,toMin(T.pause),pause)}</td>
+      <td>${Cct.minToHHMM(ampl)}</td>
+      <td>${Cct.minToHHMM(T.tt)}</td>
+      <td>${pause?Cct.minToHHMM(pause)+(toMin(T.pause)!=null?" @"+esc(T.pause):" <span style='color:var(--amber)'>?</span>"):"—"}</td>
+      <td>${Cct.minToHHMM(T.cond)}</td>
+      <td>${ex&&ex.nuitMin?Cct.minToHHMM(ex.nuitMin):"—"}</td>
+      <td>${ex&&ex.sbnMin?Cct.minToHHMM(ex.sbnMin):"—"}</td>
+      <td>${p.n}</td>
+      <td>${Cct.minToHeures(p.tt)}</td>
+      <td>${chf(p.ind)}</td>
+    </tr>`;
+  }
+  $("pauseWarn").innerHTML = sansPause.length
+    ? `<div class="warnbox"><b>Heure de pause inconnue pour ${sansPause.length} tour(s) touchant la nuit :</b> ${sansPause.join(", ")}.
+       Leur indemnité de nuit est calculée sur toute l'amplitude. Si la pause tombe entre 20 h et 6 h, elle n'est pas indemnisée
+       et le total réel sera un peu plus bas. Renseignez l'heure dans l'éditeur pour affiner.</div>`
+    : "";
+}
+
+function rendreMois(t){
+  const tb=$("tblMois").querySelector("tbody"); tb.innerHTML="";
+  let s={services:0,comp:0,repos:0,tt:0,ampl:0,cond:0,dta:0,nuitMin:0,sbnMin:0,ind:0};
+  t.parMois.forEach((m,i)=>{
+    Object.keys(s).forEach(k=>s[k]+=m[k]);
+    tb.innerHTML+=`<tr><td class="txt">${MOIS[i]}</td><td>${m.services}</td><td>${m.comp}</td><td>${m.repos}</td>
+      <td>${Cct.minToHHMM(m.tt)}</td><td>${Cct.minToHHMM(m.ampl)}</td><td>${Cct.minToHHMM(m.cond)}</td>
+      <td style="color:${m.dta>=0?"var(--green)":"var(--red)"}">${m.dta>=0?"+":""}${Cct.minToHHMM(m.dta)}</td>
+      <td>${nb(m.nuitMin)}</td><td>${nb(m.sbnMin)}</td><td>${chf(m.ind)}</td></tr>`;
+  });
+  $("tblMois").querySelector("tfoot").innerHTML=
+    `<tr><td class="txt">Année</td><td>${s.services}</td><td>${s.comp}</td><td>${s.repos}</td>
+     <td>${Cct.minToHeures(s.tt)}</td><td>${Cct.minToHeures(s.ampl)}</td><td>${Cct.minToHeures(s.cond)}</td>
+     <td style="color:${s.dta>=0?"var(--green)":"var(--red)"}">${s.dta>=0?"+":""}${Cct.minToHeures(s.dta)}</td>
+     <td>${nb(s.nuitMin)}</td><td>${nb(s.sbnMin)}</td><td>${chf(s.ind)}</td></tr>`;
+}
+
+function rendreControles(jours){
+  const list=controles(jours);
+  $("checks").innerHTML=list.map(c=>
+    `<div class="chk-item ${c.niveau==="bad"?"bad":(c.niveau==="warn"?"warn":"")}">
+       <div class="t">${esc(c.titre)}</div><div class="d">${c.detail}</div></div>`).join("");
+}
+
+function rendreMethode(t,deduire){
+  $("method").innerHTML=`
+  <p><b style="color:var(--txt)">Le cycle.</b> La rotation chargée compte ${ROT.length} semaines. Un mécanicien descend d'une ligne
+  chaque semaine et repasse de la dernière à la première. Sur une année civile, il parcourt donc environ
+  ${(365/(7*ROT.length)).toFixed(2)} cycles complets.</p>
+  <p><b style="color:var(--txt)">Temps de travail.</b> Repris du planning : c'est l'amplitude moins la pause.</p>
+  <p><b style="color:var(--txt)">Solde DTA.</b> Chaque service compte pour son temps de travail moins la norme de 6 h 50 (410 min) —
+  formule vérifiée au chiffre près sur des attestations réelles. Reste une inconnue : les jours <i>COMP</i> du planning. Sur une
+  attestation, un jour de compensation pris (JComp) débite bien 410 min, mais un jour de congé planifié ne touche pas le compteur.
+  Le réglage « Les jours COMP… » permet de tester les deux lectures ; l'écart entre elles est important, donc fiez-vous à votre
+  attestation pour savoir laquelle s'applique chez vous.</p>
+  <p><b style="color:var(--txt)">Indemnité nuit, samedi, dimanche</b> (CCT annexe 3 §2.1 à 2.3) : 5,50 CHF par heure passée entre
+  20 h et 6 h — arrondie au quart d'heure supérieur —, entre 12 h et 20 h le samedi, et entre 6 h et 20 h le dimanche ou un jour férié
+  neuchâtelois (fériés mobiles calculés d'après Pâques, Jeûne fédéral inclus). ${deduire?"Les pauses dont l'heure est connue sont retirées de la plage de nuit.":"<b style='color:var(--amber)'>La déduction des pauses est désactivée : les indemnités de nuit sont calculées sur toute l'amplitude.</b>"}</p>
+  <p><b style="color:var(--txt)">Bonification de nuit (SBN).</b> +10 % par minute entre 22 h et minuit, +40 % entre minuit et 4 h,
+  et de 4 h à 5 h lorsque le service a commencé avant 4 h. Le résultat est un crédit de temps, converti ici en francs selon la
+  même formule que le TransN Checker.</p>
+  <p><b style="color:var(--txt)">Ce qui n'est pas compté.</b> La rotation seule ne contient ni vacances, ni formation, ni maladie,
+  ni remplacement. Les indemnités de repas et de kilomètres dépendent du lieu de prise de service et de votre domicile : elles
+  ne figurent pas ici. Les totaux sont donc une projection de la rotation théorique, pas une prévision de salaire.</p>`;
+}
+
+/* ================= éditeur ================= */
+function rendreEditeur(){
+  const tb=$("tblRot").querySelector("tbody"); tb.innerHTML="";
+  ROT.forEach((sem,i)=>{
+    let tds=sem.map((c,d)=>`<td><input class="rotcell" data-sem="${i}" data-dow="${d}" value="${esc(c)}"></td>`).join("");
+    tb.innerHTML+=`<tr><td class="txt"><b>${i+1}</b></td>${tds}</tr>`;
+  });
+  const tt=$("tblEditTours").querySelector("tbody"); tt.innerHTML="";
+  Object.keys(TOURS).sort().forEach(c=>{
+    const T=TOURS[c];
+    tt.innerHTML+=`<tr><td class="txt"><b>${esc(c)}</b></td>
+      <td><input data-t="${c}" data-f="deb" value="${esc(T.deb)}"></td>
+      <td><input data-t="${c}" data-f="fin" value="${esc(T.fin)}"></td>
+      <td><input data-t="${c}" data-f="tt" value="${T.tt}"></td>
+      <td><input data-t="${c}" data-f="cond" value="${T.cond}"></td>
+      <td><input data-t="${c}" data-f="pause" value="${esc(T.pause||"")}" placeholder="hh:mm"></td>
+      <td><input data-t="${c}" data-f="lieu" value="${esc(T.lieu||"")}" placeholder="—"></td></tr>`;
+  });
+}
+function lireEditeur(){
+  document.querySelectorAll(".rotcell").forEach(inp=>{
+    ROT[+inp.dataset.sem][+inp.dataset.dow]=inp.value.trim().toUpperCase();
+  });
+  document.querySelectorAll('#tblEditTours input').forEach(inp=>{
+    const c=inp.dataset.t, f=inp.dataset.f;
+    if(!TOURS[c])return;
+    TOURS[c][f] = (f==="tt"||f==="cond") ? (parseInt(inp.value,10)||0) : inp.value.trim();
+  });
+}
+
+/* ================= dépôt de fichier ================= */
+const drop=$("drop");
+/* Boutons d'import : ouvrent le sélecteur de fichiers du système.
+   Sur iPhone, « Importer une rotation (PDF) » mène directement à l'app Fichiers. */
+function brancherImport(btnId, inputId){
+  const inp=$(inputId);
+  $(btnId).addEventListener("click",()=>inp.click());
+  inp.addEventListener("change",()=>{
+    const f=inp.files&&inp.files[0];
+    if(f) traiterFichier(f);
+    inp.value="";           // permet de réimporter le même fichier
+  });
+}
+brancherImport("btnImport","filePdf");
+brancherImport("btnImport2","filePdf");
+brancherImport("btnImportAutre","fileAutre");
+
+drop.addEventListener("click",()=>$("filePdf").click());
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f)traiterFichier(f); });
+document.addEventListener("dragover",e=>e.preventDefault());
+document.addEventListener("drop",e=>e.preventDefault());
+
+function msgImport(txt,type){
+  $("importMsg").innerHTML = txt
+    ? `<div class="warnbox" ${type==="ok"?'style="border-color:var(--green);background:var(--greenbg)"':""}>${txt}</div>` : "";
+}
+
+async function traiterFichier(f){
+  if(/\.pdf$/i.test(f.name) || f.type==="application/pdf"){
+    if(!window.pdfjsLib){ msgImport("La lecture des PDF n'a pas pu se charger. Vérifiez votre connexion, puis rechargez la page."); return; }
+    msgImport("Lecture du PDF…");
+    try{
+      const mots=await motsDuPdf(f);
+      const res=lireRotation(mots);
+      ROT=res.rot; TOURS=res.tours;
+      majSelecteurSemaines();
+      $("rotSrc").textContent=`${f.name} — ${ROT.length} semaines de cycle, ${Object.keys(TOURS).length} tours`;
+      const sansTt=Object.keys(TOURS).filter(c=>!TOURS[c].tt);
+      msgImport(`Rotation lue : <b>${ROT.length} semaines</b> × ${ROT[0].length} jours, <b>${Object.keys(TOURS).length} tours</b> reconnus`
+        + (res.colonnes.length?` (semaine du ${esc(res.colonnes[0])} au ${esc(res.colonnes[res.colonnes.length-1])})`:"")
+        + `. Vérifiez la grille dans « Modifier la rotation » avant de vous fier aux totaux.`
+        + (sansTt.length?` Temps de travail manquant pour : ${sansTt.join(", ")}.`:""), "ok");
+      rendreEditeur(); rendre();
+    }catch(err){
+      msgImport(`Ce PDF n'a pas pu être lu : ${esc(err.message)}. `
+        +`Le tableau doit contenir les dates en en-tête et les numéros de semaine à gauche. `
+        +`Vous pouvez saisir la rotation à la main dans « Modifier la rotation ».`);
+    }
+    return;
+  }
+  if(/\.json$/i.test(f.name)){
+    const rd=new FileReader();
+    rd.onload=()=>{
+      try{
+        const o=JSON.parse(rd.result);
+        if(Array.isArray(o.rotation)&&o.rotation.length&&o.tours){
+          ROT=o.rotation; TOURS=o.tours; majSelecteurSemaines();
+          $("rotSrc").textContent="rotation importée depuis "+f.name;
+          msgImport(`Rotation chargée : <b>${ROT.length} semaines</b>, ${Object.keys(TOURS).length} tours.`,"ok");
+          rendreEditeur(); rendre();
+        } else msgImport("Ce fichier JSON ne contient pas de rotation exploitable.");
+      }catch(err){ msgImport("Ce fichier JSON est illisible."); }
+    };
+    rd.readAsText(f);
+    return;
+  }
+  if(/^image\//.test(f.type)){
+    const rd=new FileReader();
+    rd.onload=()=>{ const img=$("refImg"); img.src=rd.result; img.style.display="block";
+      msgImport("Image affichée en référence. Les chiffres ne sont pas lus depuis une image : déposez le PDF, ou saisissez la rotation dans « Modifier la rotation ».");
+    };
+    rd.readAsDataURL(f);
+    return;
+  }
+  msgImport("Format non pris en charge. Déposez un PDF de rotation, un fichier JSON exporté d'ici, ou une image en référence.");
+}
+
+/* ================= export ================= */
+function telecharger(nom,contenu,type){
+  const b=new Blob([contenu],{type}); const u=URL.createObjectURL(b);
+  const a=document.createElement("a"); a.href=u; a.download=nom; a.click();
+  setTimeout(()=>URL.revokeObjectURL(u),1500);
+}
+$("btnCsv").onclick=()=>{
+  const l=["Date;Jour;Semaine cycle;Code;Type;Debut;Fin;Amplitude min;Travail min;Pause min;Conduite min;DTA min;Repos avant min;Nuit min;SBN min;Indemnites CHF"];
+  for(const j of JOURS_CACHE){
+    l.push([j.date.toLocaleDateString("fr-CH"),JOURS[j.dow],j.semaineCycle,j.code,j.type,
+      j.debMin!=null?hhmm(j.debMin):"",j.finMin!=null?hhmm(j.finMin):"",
+      j.ampl??"",j.tt??"",j.pauseDuree??"",j.cond??"",j.dta??"",j.repos??"",
+      j.nuitMin??"",j.sbnMin??"",j.indTotalChf!=null?j.indTotalChf.toFixed(2):""].join(";"));
+  }
+  telecharger(`rotation-${$("annee").value}.csv`,"\ufeff"+l.join("\r\n"),"text/csv;charset=utf-8");
+};
+$("btnJson").onclick=()=>telecharger("rotation.json",
+  JSON.stringify({cycle:ROT.length,rotation:ROT,tours:TOURS},null,2),"application/json");
+
+/* ===================================================================
+   FAQ
+   Les références citées sont celles utilisées par le moteur de calcul.
+   Pour toute décision qui compte, reportez-vous au texte officiel.
+   =================================================================== */
+const FAQ=[
+ {grp:"Pour commencer", items:[
+  {id:"quoi", t:"À quoi sert cette page ?", h:`
+<h3>À quoi sert cette page</h3>
+<p>Elle répond à une seule question : <b class="k">si je roule cette rotation toute l'année, qu'est-ce que ça donne ?</b>
+Heures travaillées, temps de conduite, indemnités en francs, bonification de nuit, week-ends pris, et respect des limites légales.</p>
+<h4>Ce qu'elle fait</h4>
+<ul>
+<li>Elle lit le <b class="k">PDF de votre rotation</b> et en déduit le cycle complet.</li>
+<li>Elle déroule ce cycle sur une année civile entière, jour par jour.</li>
+<li>Elle applique les mêmes règles de calcul que le TransN Checker (LDT, OLDT, CCT transN).</li>
+</ul>
+<h4>Ce qu'elle ne fait pas</h4>
+<ul>
+<li>Elle ne remplace pas votre attestation mensuelle : c'est une <b class="k">projection théorique</b>.</li>
+<li>Elle ignore ce qui n'est pas dans la rotation : remplacements, heures en plus, maladie, formation.</li>
+<li>Elle ne calcule ni l'indemnité de repas ni celle de kilomètres : elles dépendent de votre domicile et du lieu de prise de service.</li>
+</ul>
+<div class="att">Aucun montant ici n'est un salaire. Ce sont les indemnités prévues par la CCT, calculées à partir des horaires — pas votre fiche de paie.</div>`},
+  {id:"utiliser", t:"Comment l'utiliser", h:`
+<h3>En trois gestes</h3>
+<h4>1 — Importez votre rotation</h4>
+<p>Touchez <b class="k">📄 Importer une rotation (PDF)</b>. Sur iPhone, cela ouvre l'app Fichiers. Le tableau doit contenir
+les dates en en-tête et les numéros de semaine dans la colonne de gauche : c'est ainsi que la page repère les cases.</p>
+<p>Une <b class="k">image</b> ne peut pas être lue : les chiffres d'une photo ne sont pas du texte. Elle s'affiche seulement en référence.
+Dans ce cas, saisissez la rotation à la main dans « Modifier la rotation ».</p>
+<h4>2 — Réglez deux ou trois choses</h4>
+<p>L'<b class="k">année</b>, la <b class="k">semaine du cycle</b> où vous vous trouvez au premier lundi de l'année, et éventuellement
+vos semaines de vacances. Le reste se calcule tout seul.</p>
+<h4>3 — Lisez les totaux</h4>
+<p>Les grandes cases donnent l'essentiel. En dessous : l'année en un coup d'œil, le détail par tour, les totaux mois par mois,
+et les contrôles légaux.</p>
+<div class="ok">Vérifiez toujours la grille dans « Modifier la rotation » après un import : une case mal lue fausse toute l'année.</div>`},
+  {id:"cycle", t:"Comment marche le cycle", h:`
+<h3>Le cycle de rotation</h3>
+<p>Une rotation est un tableau : une ligne par position du cycle, une colonne par jour de la semaine.
+Chaque semaine, vous <b class="k">descendez d'une ligne</b>. Arrivé à la dernière, vous repartez à la première.</p>
+<p>Une rotation de 9 semaines se reparcourt donc environ <code>365 ÷ 63 ≈ 5,8 fois</code> par an.</p>
+<h4>Comment on vérifie que c'est juste</h4>
+<p>Les plannings impriment le <b class="k">repos avant chaque tour</b>. La page recalcule ce repos à partir des seuls horaires :
+si les valeurs retombent sur celles du document, l'enchaînement des lignes est correct.</p>
+<div class="ok">Sur la rotation CDF 2027, les 45 temps de repos imprimés correspondent tous exactement au calcul.</div>
+<h4>Le réglage « semaine du cycle au 1<sup>er</sup> lundi »</h4>
+<p>Il indique où <i>vous</i> êtes dans le tableau au début de l'année. Il décale tout le calendrier : changez-le et les totaux
+bougent un peu, puisque vous ne roulez pas les mêmes tours les mêmes jours.</p>`}
+ ]},
+ {grp:"Le vocabulaire", items:[
+  {id:"abrev", t:"Les abréviations", h:`
+<h3>Les abréviations, une par une</h3>
+<table>
+<tr><td>Amplitude</td><td>Le temps entre la prise et la fin du service, pauses comprises. Un tour de 15:13 à 00:09 a une amplitude de 8 h 56.</td></tr>
+<tr><td>TT — temps de travail</td><td>L'amplitude <b class="k">moins la pause</b>. C'est le temps qui compte comme travail.</td></tr>
+<tr><td>TR — temps rémunéré</td><td>Le temps payé sur l'attestation. Il contient déjà le temps supplémentaire et la bonification de nuit : <code>TR = TT + SBN</code>. La rotation, elle, affiche le TT.</td></tr>
+<tr><td>Conduite</td><td>Le temps réellement passé aux commandes, hors préparation, manœuvres et attentes. Il figure sur le planning.</td></tr>
+<tr><td>DTA</td><td>L'écart entre votre temps de travail et la norme quotidienne de 6 h 50 (410 min). Positif, vous accumulez ; négatif, vous prélevez.</td></tr>
+<tr><td>TS</td><td>Temps supplémentaire : les minutes faites <b class="k">en plus</b> de l'horaire prévu au GANTT pour ce tour. Une rotation théorique n'en contient pas.</td></tr>
+<tr><td>SBN</td><td><b class="k">Supplément de bonification de nuit</b> : un bonus pour les heures nocturnes. Ce n'est pas de l'argent au départ mais un <b class="k">crédit de temps</b>, qui peut se convertir en jours de congé.</td></tr>
+<tr><td>COMP</td><td>Jour de compensation inscrit dans la rotation.</td></tr>
+<tr><td>R</td><td>Jour de repos.</td></tr>
+<tr><td>PF-150, PF-550…</td><td>Codes de type de journée figurant en en-tête du planning (jours de circulation). La page ne s'en sert pas pour calculer.</td></tr>
+</table>
+<div class="att">Ne confondez pas <b class="k">DTA</b> et <b class="k">TS</b> : le DTA mesure l'écart à la norme de 6 h 50, le TS mesure un dépassement par rapport à l'horaire prévu du tour.</div>`},
+  {id:"nuit-def", t:"« Nuit » : trois notions différentes", h:`
+<h3>Trois « nuits » à ne pas mélanger</h3>
+<p>Le mot revient dans trois calculs distincts, avec des plages différentes.</p>
+<table>
+<tr><td>Indemnité de nuit<br>20 h – 6 h</td><td>Une indemnité en <b class="k">francs par heure</b> passée dans cette plage.</td></tr>
+<tr><td>Bonification SBN<br>22 h – 5 h</td><td>Un <b class="k">crédit de temps</b> proportionnel, plus généreux au cœur de la nuit.</td></tr>
+<tr><td>Service nocturne<br>0 h – 4 h</td><td>Sert à <b class="k">compter les nuits</b> pour les limites légales (nombre de nuits par période).</td></tr>
+</table>
+<p>Un tour qui finit à 21 h touche donc l'indemnité de nuit, mais ni la bonification ni le décompte des nuits.</p>`}
+ ]},
+ {grp:"Les calculs", items:[
+  {id:"c-temps", t:"Amplitude, travail, conduite", h:`
+<h3>Amplitude, temps de travail, conduite</h3>
+<h4>Amplitude</h4>
+<p><code>fin − début</code>, avec le passage de minuit géré. Un tour noté 25:11 se termine à 01:11 le lendemain.</p>
+<h4>Temps de travail</h4>
+<p>C'est la valeur imprimée sur le planning. La <b class="k">pause</b> se déduit : <code>pause = amplitude − temps de travail</code>.</p>
+<h4>Temps de conduite</h4>
+<p>Repris tel quel du planning. La page l'additionne sur l'année et le rapporte au temps de travail, ce qui donne la part
+réellement passée aux commandes — environ la moitié sur une rotation de dépôt.</p>
+<div class="ref">Limite de temps de travail par tour : <b class="k">10 h</b>. Réf. utilisée par l'outil : LDT art. 4 al. 3.
+Un dépassement n'est admis que dans des cas précis (formation, déplacement).</div>
+<div class="ref">Amplitude maximale : <b class="k">12 h</b>. Réf. utilisée : LDT art. 6 al. 1. La page signale aussi les amplitudes au-dessus de 11 h.</div>`},
+  {id:"c-dta", t:"Le solde DTA", h:`
+<h3>Le solde DTA</h3>
+<p>La norme est de <b class="k">6 h 50 par jour d'affectation</b>, soit 410 minutes. Pour chaque service :</p>
+<p><code>DTA = temps de travail − 410</code></p>
+<p>Un tour de 8 h 33 rapporte <code>513 − 410 = +103 min</code>. Un tour de 5 h 58 coûte <code>358 − 410 = −52 min</code>.</p>
+<div class="ok">Cette formule a été vérifiée au chiffre près sur une attestation réelle : la somme calculée correspond exactement au total imprimé.</div>
+<h4>Et les jours COMP ?</h4>
+<p>C'est le point délicat, et la page vous laisse choisir.</p>
+<ul>
+<li>Un <b class="k">jour de compensation pris</b> (JComp sur l'attestation) débite 410 min : vous consommez des heures accumulées.</li>
+<li>Un <b class="k">jour de congé planifié</b> ne touche pas le compteur.</li>
+</ul>
+<p>Selon la lecture retenue, le solde annuel change énormément. Le bloc « Équilibre du solde DTA », en bas de la page, chiffre les
+deux scénarios ainsi qu'un troisième : les jours pris en compensation de la bonification de nuit (ComSBN), qui débitent le
+compteur SBN et non le DTA.</p>
+<div class="att">Pour trancher, regardez une de vos attestations : un jour COMP de la rotation y apparaît-il avec −410 en colonne DTA, ou pas de DTA du tout ?</div>
+<div class="ref">Bornes du solde : <b class="k">+72 h</b> et <b class="k">−41 h</b>. Réf. utilisée : CCT transN art. 43.</div>`},
+  {id:"c-nuit", t:"Indemnité de nuit", h:`
+<h3>Indemnité de nuit</h3>
+<p>Elle rémunère les heures passées entre <b class="k">20 h et 6 h</b>, au taux de <b class="k">5,50 CHF par heure</b>.</p>
+<h4>L'arrondi</h4>
+<p>Les minutes de la plage sont <b class="k">arrondies au quart d'heure supérieur</b>. 3 h 22 de nuit deviennent 3 h 30.</p>
+<h4>La pause</h4>
+<p>Une pause n'est pas du travail : si elle tombe dans la plage de nuit, ses minutes ne sont pas indemnisées.</p>
+<div class="att">Les plannings n'indiquent pas l'heure des pauses. Quand elle est inconnue, la page calcule sur toute l'amplitude :
+le total affiché est alors un <b class="k">plafond</b>, pas une promesse. Renseignez ces heures dans l'éditeur pour affiner —
+la page vous indique quels tours sont concernés.</div>
+<div class="ref">Réf. utilisée : CCT transN, annexe 3 §2.1.</div>`},
+  {id:"c-samdim", t:"Samedi, dimanche et fériés", h:`
+<h3>Samedi, dimanche et jours fériés</h3>
+<p>Même taux de <b class="k">5,50 CHF par heure</b>, mais des plages différentes :</p>
+<table>
+<tr><td>Samedi</td><td>de 12 h à 20 h</td></tr>
+<tr><td>Dimanche et fériés</td><td>de 6 h à 20 h</td></tr>
+</table>
+<p>Ces indemnités <b class="k">s'ajoutent</b> à celle de nuit : un dimanche de 5 h à 15 h touche la nuit de 5 h à 6 h, puis le
+dimanche de 6 h à 15 h. Sur l'attestation, tout est regroupé dans une seule colonne.</p>
+<h4>Quels jours fériés ?</h4>
+<p>Ceux du canton de Neuchâtel. Les dates mobiles sont calculées automatiquement à partir de Pâques.</p>
+<table>
+<tr><td>Dates fixes</td><td>1<sup>er</sup> et 2 janvier · 1<sup>er</sup> mars · 1<sup>er</sup> mai · 1<sup>er</sup> août · 25 et 26 décembre</td></tr>
+<tr><td>Dates mobiles</td><td>Vendredi saint · lundi de Pâques · Ascension · lundi de Pentecôte · Jeûne fédéral et le lundi suivant</td></tr>
+</table>
+<p>Dans le ruban annuel, les jours fériés sont entourés d'un liseré doré.</p>
+<div class="ref">Réf. utilisée : CCT transN, annexe 3 §2.2 et §2.3.</div>`},
+  {id:"c-sbn", t:"La bonification de nuit (SBN)", h:`
+<h3>La bonification de nuit (SBN)</h3>
+<p>Elle récompense la pénibilité des heures nocturnes. Chaque minute travaillée rapporte un pourcentage de minute en plus :</p>
+<table>
+<tr><td>22 h → minuit</td><td>+10 %</td></tr>
+<tr><td>minuit → 4 h</td><td>+40 %</td></tr>
+<tr><td>4 h → 5 h</td><td>+40 %, uniquement si le service a commencé <b class="k">avant 4 h</b></td></tr>
+</table>
+<p>Un service de 22 h à 2 h donne : 120 min à 10 % (12 min) plus 120 min à 40 % (48 min), soit <b class="k">60 minutes</b> de bonification.</p>
+<h4>Du temps ou de l'argent ?</h4>
+<p>D'abord du <b class="k">temps</b> : le SBN alimente un compteur annuel. Une fois 410 minutes accumulées, cela représente un jour
+de congé — c'est ce que la page affiche sous « jours de congé ». Le montant en francs est indiqué à titre de comparaison.</p>
+<div class="ref">Réf. utilisée : OLDT art. 17.</div>`},
+  {id:"c-repos", t:"Le repos entre deux services", h:`
+<h3>Le repos entre deux services</h3>
+<p>C'est le temps entre la fin d'un service et le début du suivant. La page le calcule sur toute l'année et signale le plus court.</p>
+<table>
+<tr><td>12 h</td><td>La cible normale.</td></tr>
+<tr><td>11 h</td><td>Réduction admise, en principe une fois par semaine.</td></tr>
+<tr><td>9 h</td><td>Réduction plus forte, soumise à convention.</td></tr>
+<tr><td>Moins de 8 h</td><td>Réservé aux cas de force majeure.</td></tr>
+</table>
+<p>Sur la rotation CDF 2027, le repos le plus court est de <b class="k">11 h 53</b> : la rotation reste au-dessus des paliers de réduction.</p>
+<div class="ref">Réf. utilisées : LDT art. 8 et OLDT art. 18 al. 2.</div>`},
+  {id:"c-limites", t:"Les limites sur la durée", h:`
+<h3>Les limites sur la durée</h3>
+<p>La page vérifie ces points sur l'année entière et vous dit combien de fois chaque situation se présente.</p>
+<table>
+<tr><td>Jours consécutifs</td><td>Au maximum <b class="k">13 jours</b> de service entre deux jours de repos. Réf. utilisée : OLDT art. 20 al. 2.</td></tr>
+<tr><td>Nuits sur 28 jours</td><td>Au maximum <b class="k">15 services nocturnes</b> (touchant 0 h – 4 h) sur 28 jours glissants. Réf. utilisée : LDT art. 9 al. 3.</td></tr>
+<tr><td>Nuits consécutives</td><td>Au maximum <b class="k">7</b> d'affilée.</td></tr>
+<tr><td>Amplitude</td><td>Maximum <b class="k">12 h</b>. Réf. utilisée : LDT art. 6 al. 1.</td></tr>
+<tr><td>Travail par tour</td><td>Maximum <b class="k">10 h</b>. Réf. utilisée : LDT art. 4 al. 3.</td></tr>
+</table>
+<p>Les dimanches sont <b class="k">comptés sans jugement</b> : la page indique combien vous en travaillez et combien restent libres,
+sans appliquer de seuil. Le minimum figure dans la LDT et la CCT — reportez-vous au texte.</p>
+<div class="att">Ces contrôles portent sur la rotation telle qu'elle est planifiée. Un remplacement ou un échange peut faire franchir une limite
+sans que cette page le voie.</div>`}
+ ]},
+ {grp:"Questions fréquentes", items:[
+  {id:"q-dta", t:"Pourquoi mon solde DTA est négatif ?", h:`
+<h3>Pourquoi le solde DTA ressort négatif ?</h3>
+<p>Parce que la page suppose, par défaut, que <b class="k">chaque jour COMP débite 410 minutes</b>. Sur la rotation CDF, les services
+accumulent environ +291 h dans l'année, mais 52 jours de compensation en retireraient 355 h : le solde plonge.</p>
+<h4>Est-ce inquiétant ?</h4>
+<p>Probablement pas. Les soldes réels observés sur des attestations sont <b class="k">positifs et croissants</b>. Si chaque COMP
+débitait vraiment le compteur, personne ne serait dans le vert. Une partie de ces jours sont donc vraisemblablement des congés
+planifiés, ou pris sur le compteur SBN.</p>
+<h4>Que faire</h4>
+<p>Basculez le réglage <b class="k">« Les jours COMP… »</b> sur « congés planifiés » et comparez. Le bloc « Équilibre du solde DTA »
+donne les trois scénarios chiffrés. Votre attestation tranche : regardez si un jour COMP y porte −410 en colonne DTA.</p>
+<div class="att">Le DTA n'est pas une limite légale, c'est un compteur de gestion. Les bornes conventionnelles sont +72 h et −41 h (CCT art. 43).</div>`},
+  {id:"q-nuit", t:"Pourquoi le total de nuit est « un plafond » ?", h:`
+<h3>Pourquoi le total de nuit est un plafond</h3>
+<p>Parce que les pauses ne sont pas indemnisées, et que les plannings n'indiquent pas <b class="k">à quelle heure</b> elles tombent.</p>
+<p>Si un tour de nuit comporte 30 minutes de pause et que celle-ci se situe entre 20 h et 6 h, ces 30 minutes ne comptent pas.
+Sans l'heure exacte, la page ne peut pas le savoir : elle calcule donc sur toute l'amplitude, ce qui donne la valeur maximale possible.</p>
+<p>Deux tours font exception, leurs pauses ayant été relevées sur le terrain : le <b class="k">1201</b> (21 h 08 à Bienne) et le
+<b class="k">1202</b> (20 h 19 à Neuchâtel). Les deux tombent en pleine nuit, leur déduction est donc appliquée.</p>
+<div class="ok">Pour affiner : ouvrez « Modifier la rotation », section « Horaires et minutages des tours », et saisissez l'heure de pause.
+Le calcul se met à jour immédiatement.</div>`},
+  {id:"q-vac", t:"Et mes vacances, mes remplacements ?", h:`
+<h3>Vacances, remplacements, absences</h3>
+<p>La rotation ne les contient pas : elle décrit un déroulement théorique.</p>
+<h4>Vacances</h4>
+<p>Le réglage « semaines de vacances » retire des semaines entières du calcul, réparties sur l'année. C'est une approximation :
+elle montre l'effet sur les totaux, pas le traitement exact de vos droits.</p>
+<h4>Remplacements et heures en plus</h4>
+<p>Invisibles ici, alors qu'ils comptent beaucoup dans la réalité : ce sont eux qui alimentent le solde d'heures et gonflent
+les indemnités. C'est l'une des raisons pour lesquelles vos totaux réels dépasseront ceux de cette page.</p>
+<h4>Maladie, accident, formation</h4>
+<p>Non représentés non plus. Sur une attestation, ces journées suivent des règles propres.</p>`},
+  {id:"q-diff", t:"Un chiffre ne correspond pas", h:`
+<h3>Un chiffre ne correspond pas à mon attestation</h3>
+<p>C'est attendu, et voici les causes les plus fréquentes.</p>
+<ul>
+<li><b class="k">Vous n'avez pas roulé la rotation à la lettre</b> : un échange, un remplacement, une formation, et l'année réelle diverge.</li>
+<li><b class="k">La semaine de départ est mal réglée</b> : vérifiez à quelle position du cycle vous étiez au premier lundi de l'année.</li>
+<li><b class="k">Une case a été mal lue à l'import</b> : ouvrez « Modifier la rotation » et comparez avec votre planning.</li>
+<li><b class="k">Les pauses de nuit</b> : voir la question précédente, le total de nuit est un maximum.</li>
+<li><b class="k">Les horaires ont changé</b> : une rotation 2027 n'a pas les mêmes horaires qu'en 2026, même pour un tour au même numéro.</li>
+</ul>
+<div class="ok">Si un écart persiste et vous paraît anormal, notez le tour et la date : c'est ce genre de retour qui permet de corriger l'outil.</div>`},
+  {id:"q-donnees", t:"Où vont mes données ?", h:`
+<h3>Où vont vos données</h3>
+<p><b class="k">Nulle part.</b> Tout est calculé dans votre navigateur : le PDF que vous déposez n'est envoyé à aucun serveur,
+et rien n'est enregistré en ligne.</p>
+<p>La page est un fichier unique. Vous pouvez l'enregistrer et l'utiliser hors connexion — seule la bibliothèque qui lit les PDF
+est chargée depuis Internet au premier affichage.</p>
+<h4>Exporter</h4>
+<ul>
+<li><b class="k">CSV</b> : le détail jour par jour de l'année, ouvrable dans un tableur.</li>
+<li><b class="k">JSON</b> : la rotation elle-même, à recharger plus tard ou à transmettre à un collègue.</li>
+</ul>`}
+ ]}
+];
+
+function faqConstruire(){
+  const nav=$("faqNav"); nav.innerHTML="";
+  FAQ.forEach(g=>{
+    const t=document.createElement("div"); t.className="grp"; t.textContent=g.grp; nav.appendChild(t);
+    g.items.forEach(it=>{
+      const a=document.createElement("a"); a.textContent=it.t; a.dataset.id=it.id; a.tabIndex=0;
+      a.onclick=()=>faqAfficher(it.id);
+      a.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); faqAfficher(it.id); } };
+      nav.appendChild(a);
+    });
+  });
+}
+function faqAfficher(id){
+  let item=null; FAQ.forEach(g=>g.items.forEach(it=>{ if(it.id===id)item=it; }));
+  if(!item)return;
+  $("faqTxt").innerHTML=item.h;
+  $("faqTxt").scrollTop=0;
+  document.querySelectorAll("#faqNav a").forEach(a=>a.classList.toggle("on",a.dataset.id===id));
+  if(window.innerWidth<=860) $("faqTxt").scrollIntoView({block:"start",behavior:"smooth"});
+}
+function faqOuvrir(){
+  if(!$("faqNav").children.length) faqConstruire();
+  if(!$("faqTxt").innerHTML.trim()) faqAfficher("quoi");
+  $("faqModal").classList.add("show");
+}
+$("btnFaq").onclick=faqOuvrir;
+$("btnFaqClose").onclick=()=>$("faqModal").classList.remove("show");
+$("faqModal").onclick=e=>{ if(e.target.id==="faqModal") $("faqModal").classList.remove("show"); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") $("faqModal").classList.remove("show"); });
+
+/* ================= démarrage ================= */
+function majSelecteurSemaines(){
+  const sel=$("sem1"), avant=+sel.value||1;
+  sel.innerHTML="";
+  for(let i=1;i<=ROT.length;i++){ const o=document.createElement("option"); o.value=i; o.textContent="Semaine "+i+" / "+ROT.length; sel.appendChild(o); }
+  sel.value = avant<=ROT.length ? avant : 1;
+}
+(function init(){
+  majSelecteurSemaines();
+  rendreEditeur();
+  rendre();
+  ["annee","sem1","vac","deduirePause","compMode"].forEach(id=>$(id).addEventListener("change",rendre));
+  $("btnApply").onclick=()=>{ lireEditeur(); rendreEditeur(); rendre(); };
+  $("btnReset").onclick=()=>{ ROT=JSON.parse(JSON.stringify(ROT_DEFAUT)); TOURS=JSON.parse(JSON.stringify(TOURS_DEFAUT));
+    majSelecteurSemaines(); $("rotSrc").textContent="exemple : rotation CDF (planning 04.10.2027 – 10.10.2027)"; msgImport(""); rendreEditeur(); rendre(); };
+})();
+</script>
+</body>
+</html>
