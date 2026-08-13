@@ -612,6 +612,24 @@ function agreger(jours){
 function controles(jours){
   const r=[];
   const tours=jours.filter(j=>j.type==="tour");
+  const nbComp0=jours.filter(j=>j.type==="comp").length;
+
+  // LE test légal de la durée du travail (art. 4 al. 1 LDT, calculé selon art. 9 OLDT)
+  const totalTT=tours.reduce((a,j)=>a+j.tt,0);
+  const denom=tours.length+nbComp0;
+  const moyQuot=denom?totalTT/denom:0;
+  const MAX_LEGAL=420;
+  r.push({niveau: moyQuot>MAX_LEGAL ? "bad":"ok", titre:"Durée quotidienne moyenne du travail",
+    detail:`<b>${totalTT.toLocaleString("fr-CH")} min</b> de travail ÷ <b>${denom}</b> jours (travail + compensation) = `+
+      `<b>${moyQuot.toFixed(1)} min</b> par jour, soit <b>${Cct.minToHHMM(moyQuot)}</b>.<br>`+
+      `La LDT fixe un <b>maximum</b> de 7 h 00 (420 min) en moyenne annuelle — art. 4 al. 1, la formule de calcul étant `+
+      `donnée par l'art. 9 OLDT (« diviser le temps de travail total fourni en 365 jours par le nombre de jours de travail `+
+      `et de compensation »). `+
+      (moyQuot>MAX_LEGAL
+        ? `<b>Ce maximum est dépassé de ${(moyQuot-MAX_LEGAL).toFixed(1)} min par jour.</b>`
+        : `La rotation est <b>sous ce plafond de ${(MAX_LEGAL-moyQuot).toFixed(1)} min par jour</b> : elle est conforme sur ce point.`)+
+      `<br><span style="color:var(--amber)">Attention : la loi plafonne la durée du travail, elle ne garantit pas un volume minimal. `+
+      `La norme de 410 min utilisée pour le solde DTA est une référence interne de l'entreprise, pas un minimum légal.</span>`});
 
   // cohérence avec le planning : les repos imprimés doivent retomber sur le calcul
   if(REPOS_REF && REPOS_REF.length){
@@ -652,13 +670,21 @@ function controles(jours){
            :(r9>0?" Une réduction sous 9 h demande une convention (OLDT art. 18 al. 2)."
                  :" Conforme aux paliers LDT art. 8 / OLDT art. 18."))});
 
-  // amplitude
+  // amplitude : la loi raisonne en moyenne sur 28 jours, avec un plafond ponctuel
   const ampMax=tours.reduce((a,j)=>Math.max(a,j.ampl),0);
-  const amp12=tours.filter(j=>j.ampl>Cct.Amplitude_Max).length;
-  const amp11=tours.filter(j=>j.ampl>Cct.Amplitude_CibleMax&&j.ampl<=Cct.Amplitude_Max).length;
-  r.push({niveau:amp12>0?"bad":(amp11>0?"warn":"ok"), titre:"Amplitude des tours",
-    detail:`Amplitude maximale de la rotation : <b>${Cct.minToHHMM(ampMax)}</b>. Au-dessus de 11 h : <b>${amp11}</b> tours par an ; au-dessus de 12 h : <b>${amp12}</b>.`+
-      (amp12>0?" Le maximum légal de 12 h (LDT art. 6) est dépassé.":" Le maximum légal de 12 h est respecté.")});
+  let pireMoy28=0;
+  for(let i=0;i+28<=jours.length;i++){
+    const f=jours.slice(i,i+28).filter(j=>j.type==="tour");
+    if(!f.length)continue;
+    const m=f.reduce((a,b)=>a+b.ampl,0)/f.length;
+    if(m>pireMoy28) pireMoy28=m;
+  }
+  const amp13=tours.filter(j=>j.ampl>780).length;
+  r.push({niveau: (pireMoy28>720||amp13>0)?"bad":"ok", titre:"Tour de service (amplitude)",
+    detail:`Moyenne la plus élevée sur 28 jours glissants : <b>${Cct.minToHHMM(pireMoy28)}</b> — la limite est de <b>12 h</b> `+
+      `en moyenne sur 28 jours (art. 6 al. 1 LDT), le tour pouvant être prolongé une fois à 13 h entre deux jours sans service.<br>`+
+      `Amplitude la plus longue de l'année : <b>${Cct.minToHHMM(ampMax)}</b>` +
+      (amp13>0?` — <b>${amp13}</b> tour(s) au-dessus de 13 h.`:`. Aucun tour au-dessus de 13 h.`)});
 
   // temps de travail effectif
   const te10=tours.filter(j=>j.tt>Cct.TE_Max_Tour).length;
@@ -694,10 +720,22 @@ function controles(jours){
   // dimanches — comptage neutre, sans seuil : le minimum figure dans la LDT et la CCT
   const dimTrav=jours.filter(j=>j.type==="tour"&&j.date.getDay()===0).length;
   const dimLibres=jours.filter(j=>j.date.getDay()===0&&j.type!=="tour").length;
-  r.push({niveau:"ok", titre:"Dimanches",
-    detail:`<b>${dimTrav}</b> dimanches travaillés et <b>${dimLibres}</b> dimanches libres sur l'année, `+
-      `soit un dimanche de repos toutes les <b>${dimLibres?(52/dimLibres).toFixed(1):"—"}</b> semaines en moyenne. `+
-      `Le nombre minimal de dimanches de repos est fixé par la LDT (art. 11) et la CCT — à confronter au texte, cet outil ne l'applique pas.`});
+  r.push({niveau: dimLibres<20?"bad":"ok", titre:"Dimanches de repos",
+    detail:`<b>${dimTrav}</b> dimanches travaillés et <b>${dimLibres}</b> dimanches sans service sur l'année.<br>`+
+      `L'art. 19 al. 1 OLDT exige <b>au moins 20 jours de repos attribués un dimanche</b> `+
+      (dimLibres>=20?`— la rotation en compte ${dimLibres}, le minimum est respecté.`:`— il en manque ${20-dimLibres}.`)+
+      `<br>À noter : les dimanches tombant pendant les vacances ne comptent pas comme dimanches de repos (art. 19 al. 4 OLDT), `+
+      `et un dimanche seulement partiellement travaillé ne compte pas non plus (al. 3).`});
+
+  // 4 jours de repos par mois civil dont un dimanche (art. 20 al. 1 OLDT)
+  const parMoisR=Array.from({length:12},()=>({r:0,dim:0}));
+  for(const j of jours) if(j.type==="repos"){ parMoisR[j.date.getMonth()].r++; if(j.date.getDay()===0)parMoisR[j.date.getMonth()].dim++; }
+  const moisFaibles=parMoisR.map((m,i)=>({m:MOIS[i],...m})).filter(m=>m.r<4||m.dim<1);
+  r.push({niveau:moisFaibles.length?"bad":"ok", titre:"Répartition mensuelle des repos",
+    detail:`L'art. 20 al. 1 OLDT exige <b>au moins 4 jours de repos par mois civil, dont un dimanche</b>. `+
+      (moisFaibles.length
+        ? `Mois en défaut : ${moisFaibles.map(x=>x.m+" ("+x.r+" repos, "+x.dim+" dimanche)").join(", ")}.`
+        : `Chaque mois de l'année satisfait cette règle.`)});
 
   // équilibre de la rotation : les compensations résorbent-elles ce que les services accumulent ?
   const dtaServices=tours.reduce((a,j)=>a+j.dta,0);
@@ -710,7 +748,9 @@ function controles(jours){
   const compFinancables=dtaServices/Cct.Rcomp_Duree;
   const borneNeg=-41*60;
   r.push({niveau: soldeDebit<borneNeg ? "warn" : "ok", titre:"Équilibre du solde DTA",
-    detail:`Sur l'attestation, un jour de compensation pris est débité de 6 h 50 (<code>JComp 410 −410</code>) : le compteur mesure `+
+    detail:`<span style="color:var(--amber)">Ce compteur relève de la gestion interne transN, pas de la loi : la LDT plafonne `+
+      `la durée du travail (7 h/jour en moyenne) sans imposer de volume minimal. Voir « Durée quotidienne moyenne du travail ».</span><br>`+
+      `Sur l'attestation, un jour de compensation pris est débité de 6 h 50 (<code>JComp 410 −410</code>) : le compteur mesure `+
       `le temps accumulé au-dessus de la norme, et prendre un jour de compensation le consomme.<br>`+
       `Les <b>${tours.length}</b> services de cette rotation accumulent <b>${dtaLong(dtaServices)}</b>, `+
       `soit de quoi financer <b>${compFinancables.toFixed(1)}</b> jours de compensation. La rotation en prévoit <b>${nbComp}</b> — `+
@@ -737,10 +777,12 @@ function controles(jours){
   r.push({niveau:"ok", titre:"Jours de repos et de compensation",
     detail:`La rotation planifie <b>${nbR}</b> jours de repos et <b>${nbC}</b> jours de compensation`+
       (nbVac?`, plus ${nbVac} jours de vacances`:"")+`, soit <b>${nbR+nbC+nbVac}</b> jours sans service.<br>`+
-      `La CCT fixe le droit à <b>64 jours de repos</b> par année civile (annexe 4 §1.6) ; l'annexe 8 cite « 64 jours de repos et `+
-      `52 jours de compensation » — cette dernière mention vise le service de piquet, à confirmer pour la conduite.<br>`+
+      `<b>La LDT (art. 10 al. 1) garantit 63 jours de repos payés par année civile</b>, et la CCT transN en prévoit `+
+      `<b>64</b> (annexe 4 §1.6) ; l'annexe 8 cite « 64 jours de repos et 52 jours de compensation ».<br>`+
+      `Les jours de compensation sont distincts des jours de repos : ce sont « les jours sans service qui doivent être accordés `+
+      `au travailleur pour respecter les prescriptions sur la durée du travail » (art. 4c LDT).<br>`+
       (nbR<64 && nbVac===0
-        ? `Il manque <b>${64-nbR}</b> jours de repos par rapport à ce droit. En requalifiant ces <b>${64-nbR}</b> jours de `+
+        ? `<b style="color:var(--amber)">Il manque ${64-nbR} jours de repos par rapport au droit CCT (${63-nbR} par rapport à la LDT).</b> En requalifiant ces <b>${64-nbR}</b> jours de `+
           `compensation en jours de repos — même nombre de services, même temps de travail, seule l'étiquette change — `+
           `la rotation compterait ${nbR+(64-nbR)} repos et ${nbC-(64-nbR)} compensations, et le solde annuel passerait de `+
           `<b>${dtaLong(dtaServices-nbC*Cct.Rcomp_Duree)}</b> à `+
