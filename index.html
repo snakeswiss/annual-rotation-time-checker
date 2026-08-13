@@ -719,8 +719,15 @@ function controles(jours){
       (nbVac?`, plus ${nbVac} jours de vacances`:"")+`, soit <b>${nbR+nbC+nbVac}</b> jours sans service.<br>`+
       `La CCT fixe le droit à <b>64 jours de repos</b> par année civile (annexe 4 §1.6) ; l'annexe 8 cite « 64 jours de repos et `+
       `52 jours de compensation » — cette dernière mention vise le service de piquet, à confirmer pour la conduite.<br>`+
+      (nbR<64 && nbVac===0
+        ? `Il manque <b>${64-nbR}</b> jours de repos par rapport à ce droit. En requalifiant ces <b>${64-nbR}</b> jours de `+
+          `compensation en jours de repos — même nombre de services, même temps de travail, seule l'étiquette change — `+
+          `la rotation compterait ${nbR+(64-nbR)} repos et ${nbC-(64-nbR)} compensations, et le solde annuel passerait de `+
+          `<b>${Cct.minToHHMM(dtaServices-nbC*Cct.Rcomp_Duree)}</b> à `+
+          `<b>${(dtaServices-(nbC-(64-nbR))*Cct.Rcomp_Duree)>=0?"+":""}${Cct.minToHHMM(dtaServices-(nbC-(64-nbR))*Cct.Rcomp_Duree)}</b>.<br>`
+        : ``)+
       `Un tableau de service annuel comprend en plus les vacances et les jours RR, que la rotation seule ne contient pas : `+
-      `l'écart avec ces droits se comble à ce moment-là.`});
+      `l'écart avec ces droits peut aussi se combler à ce moment-là.`});
 
   return r;
 }
