@@ -79,6 +79,16 @@
   .bar24 .seg{position:absolute;top:2px;bottom:2px;border-radius:2px}
   .bar24 .pz{position:absolute;top:2px;bottom:2px;background:#0b0f15;border-left:1px solid #46536b;border-right:1px solid #46536b}
 
+  /* calcul posé */
+  h4.ct{color:var(--accent);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 7px;font-weight:600}
+  h4.ct:first-child{margin-top:2px}
+  table.calc{margin:0}
+  table.calc td{border-bottom:1px solid #1e2531}
+  table.calc td.txt{color:var(--muted)}
+  table.calc tr.tot td{border-top:1px solid var(--line);border-bottom:none;color:var(--txt);padding-top:8px}
+  table.calc tr.fin td{border-top:2px solid var(--accent);font-size:14.5px}
+  table.calc thead th{position:static}
+
   /* contrôles légaux */
   .checks{display:flex;flex-direction:column;gap:8px}
   .chk-item{border-left:3px solid var(--green);background:var(--greenbg);border-radius:0 7px 7px 0;padding:8px 12px}
@@ -278,12 +288,17 @@
       <table id="tblMois">
         <thead><tr>
           <th>Mois</th><th>Services</th><th>COMP</th><th>Repos</th><th>Travail</th><th>Amplitude</th>
-          <th>Conduite</th><th>DTA</th><th>Nuit (min)</th><th>SBN (min)</th><th>Indemnités</th>
+          <th>Conduite</th><th>DTA (min)</th><th>Nuit (min)</th><th>SBN (min)</th><th>Indemnités</th>
         </tr></thead>
         <tbody></tbody>
         <tfoot></tfoot>
       </table>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Le calcul posé <span class="note">chaque étape, avec les nombres — pour vérifier ou présenter</span></h2>
+    <div id="calcul"></div>
   </div>
 
   <div class="card">
@@ -464,6 +479,11 @@ function estTour(code){ return /^\d/.test(String(code||"").trim()); }
    journée de changement d'heure ne dure pas 24 h : compter en millisecondes
    décalerait la position dans le cycle de fin mars à fin octobre. */
 function joursEntre(a,b){ return Math.round((b-a)/86400000); }
+/* Le DTA s'affiche en minutes — l'unité de l'attestation — avec l'équivalent en heures. */
+function sgn(m){ return m>0?"+":""; }
+function dtaMin(m){ return sgn(m)+Math.round(m).toLocaleString("fr-CH")+" min"; }
+function dtaLong(m){ return dtaMin(m)+" ("+sgn(m)+Cct.minToHeures(m)+")"; }
+function dtaCourt(m){ return dtaMin(m)+" ("+sgn(m)+Cct.minToHHMM(m)+")"; }
 function typeJour(code){ const c=String(code||"").trim().toUpperCase();
   if(c==="R"||c==="REPOS")return "repos"; if(c==="COMP")return "comp"; if(estTour(c))return "tour"; return "vide"; }
 
@@ -692,17 +712,17 @@ function controles(jours){
   r.push({niveau: soldeDebit<borneNeg ? "warn" : "ok", titre:"Équilibre du solde DTA",
     detail:`Sur l'attestation, un jour de compensation pris est débité de 6 h 50 (<code>JComp 410 −410</code>) : le compteur mesure `+
       `le temps accumulé au-dessus de la norme, et prendre un jour de compensation le consomme.<br>`+
-      `Les <b>${tours.length}</b> services de cette rotation accumulent <b>+${Cct.minToHHMM(dtaServices)}</b>, `+
+      `Les <b>${tours.length}</b> services de cette rotation accumulent <b>${dtaLong(dtaServices)}</b>, `+
       `soit de quoi financer <b>${compFinancables.toFixed(1)}</b> jours de compensation. La rotation en prévoit <b>${nbComp}</b> — `+
       (soldeDebit<0
-        ? `il en manque donc l'équivalent de <b>${((-soldeDebit)/Cct.Rcomp_Duree).toFixed(1)}</b> jours, soit <b>${Cct.minToHHMM(soldeDebit)}</b> sur l'année.`
-        : `soit un excédent de <b>+${Cct.minToHHMM(soldeDebit)}</b>.`)+`<br>`+
+        ? `il en manque donc l'équivalent de <b>${((-soldeDebit)/Cct.Rcomp_Duree).toFixed(1)}</b> jours, soit <b>${dtaLong(soldeDebit)}</b> sur l'année.`
+        : `soit un excédent de <b>${dtaLong(soldeDebit)}</b>.`)+`<br>`+
       (soldeDebit<0
         ? `Cet écart se comble en pratique par les remplacements, les heures supplémentaires et la bonification de nuit convertie en congé `+
           `(<b>${compParSbn}</b> jours possibles avec les ${Cct.minToHHMM(sbnTotal)} de SBN, ce qui ramènerait le solde à `+
-          `<b>${soldeAvecSbn>=0?"+":""}${Cct.minToHHMM(soldeAvecSbn)}</b>). S'il persiste, c'est un point à porter à la commission des tours.`
+          `<b>${dtaLong(soldeAvecSbn)}</b>). S'il persiste, c'est un point à porter à la commission des tours.`
         : `La rotation dégage du temps au-delà des compensations prévues.`)+`<br>`+
-      `Bornes conventionnelles du solde : +72 h 00 et −41 h 00 (annexe 4 §1.3).`+
+      `Bornes conventionnelles du solde : +4 320 min (+72 h 00) et −2 460 min (−41 h 00), annexe 4 §1.3.`+
       (soldeDebit<borneNeg
         ? `<br><b>Ce déficit dépasse la borne de −41 h.</b> Le scénario ne peut donc pas se réaliser tel quel sur une année : `+
           `on ne peut pas prendre plus de compensation qu'on en a acquis. Dans les faits, une partie de ces jours est forcément `+
@@ -723,8 +743,8 @@ function controles(jours){
         ? `Il manque <b>${64-nbR}</b> jours de repos par rapport à ce droit. En requalifiant ces <b>${64-nbR}</b> jours de `+
           `compensation en jours de repos — même nombre de services, même temps de travail, seule l'étiquette change — `+
           `la rotation compterait ${nbR+(64-nbR)} repos et ${nbC-(64-nbR)} compensations, et le solde annuel passerait de `+
-          `<b>${Cct.minToHHMM(dtaServices-nbC*Cct.Rcomp_Duree)}</b> à `+
-          `<b>${(dtaServices-(nbC-(64-nbR))*Cct.Rcomp_Duree)>=0?"+":""}${Cct.minToHHMM(dtaServices-(nbC-(64-nbR))*Cct.Rcomp_Duree)}</b>.<br>`
+          `<b>${dtaLong(dtaServices-nbC*Cct.Rcomp_Duree)}</b> à `+
+          `<b>${dtaLong(dtaServices-(nbC-(64-nbR))*Cct.Rcomp_Duree)}</b>.<br>`
         : ``)+
       `Un tableau de service annuel comprend en plus les vacances et les jours RR, que la rotation seule ne contient pas : `+
       `l'écart avec ces droits peut aussi se combler à ce moment-là.`});
@@ -876,9 +896,10 @@ function rendre(){
         `${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service · <b style="color:var(--txt)">${hSem.toFixed(1)} h</b> par semaine travaillée`,"info"),
     kpi("Amplitude cumulée", Cct.minToHeures(t.ampl), `dont ${Cct.minToHeures(t.pause)} de pauses`),
     kpi("Temps de conduite", Cct.minToHeures(t.cond), `${t.tt?Math.round(t.cond/t.tt*100):0} % du temps de travail`),
-    kpi("Solde DTA", (t.dta>0?"+":"")+Cct.minToHeures(t.dta),
-        `<b style="color:var(--txt)">ou ${(autreDta>0?"+":"")+Cct.minToHeures(autreDta)}</b> si les jours COMP ${compDebite?"sont des congés planifiés":"débitent le solde"} — `
-        +`les deux lectures diffèrent de ${Cct.minToHeures(t.comp*Cct.Rcomp_Duree)}. Voir « Équilibre du solde DTA ».`,
+    kpi("Solde DTA", dtaMin(t.dta),
+        `<b style="color:var(--txt)">${sgn(t.dta)+Cct.minToHeures(t.dta)}</b> · ou ${dtaLong(autreDta)} si les jours COMP `
+        +`${compDebite?"ne touchent pas le solde":"débitent le solde"} — écart de ${dtaLong(t.comp*Cct.Rcomp_Duree)}. `
+        +`Voir « Équilibre du solde DTA ».`,
         t.dta>=0?"good":"info"),
     kpi("Indemnités", chf(t.indTotal)+" CHF", `nuit ${chf(t.indNuit)} · sam ${chf(t.indSam)} · dim ${chf(t.indDim)} · SBN ${chf(t.sbnChf)}`,"good"),
     kpi("Bonification nuit", Cct.minToHeures(t.sbnMin), `${chf(t.sbnChf)} CHF · ${(t.sbnMin/410).toFixed(2)} jours de congé`,"info"),
@@ -890,6 +911,7 @@ function rendre(){
   rendreRuban(jours);
   rendreTours(t,jours);
   rendreMois(t);
+  rendreCalcul(t,jours,compDebite);
   rendreControles(jours);
   rendreMethode(t,deduire);
 }
@@ -991,15 +1013,71 @@ function rendreMois(t){
     Object.keys(s).forEach(k=>s[k]+=m[k]);
     tb.innerHTML+=`<tr><td class="txt">${MOIS[i]}</td><td>${m.services}</td><td>${m.comp}</td><td>${m.repos}</td>
       <td>${Cct.minToHHMM(m.tt)}</td><td>${Cct.minToHHMM(m.ampl)}</td><td>${Cct.minToHHMM(m.cond)}</td>
-      <td style="color:${m.dta>=0?"var(--green)":"var(--red)"}">${m.dta>=0?"+":""}${Cct.minToHHMM(m.dta)}</td>
+      <td style="color:${m.dta>=0?"var(--green)":"var(--red)"}">${dtaMin(m.dta)}<span style="color:var(--muted)"> (${sgn(m.dta)}${Cct.minToHHMM(m.dta)})</span></td>
       <td>${nb(m.nuitMin)}</td><td>${nb(m.sbnMin)}</td><td>${chf(m.ind)}</td></tr>`;
   });
   $("tblMois").querySelector("tfoot").innerHTML=
     `<tr><td class="txt">Année</td><td>${s.services}</td><td>${s.comp}</td><td>${s.repos}</td>
      <td>${Cct.minToHeures(s.tt)}</td><td>${Cct.minToHeures(s.ampl)}</td><td>${Cct.minToHeures(s.cond)}</td>
-     <td style="color:${s.dta>=0?"var(--green)":"var(--red)"}">${s.dta>=0?"+":""}${Cct.minToHeures(s.dta)}</td>
+     <td style="color:${s.dta>=0?"var(--green)":"var(--red)"}">${dtaMin(s.dta)}<span style="color:var(--muted)"> (${sgn(s.dta)}${Cct.minToHeures(s.dta)})</span></td>
      <td>${nb(s.nuitMin)}</td><td>${nb(s.sbnMin)}</td><td>${chf(s.ind)}</td></tr>`;
 }
+
+function rendreCalcul(t,jours,compDebite){
+  const N=410;
+  const lig=(lib,val,cls)=>`<tr class="${cls||""}"><td class="txt">${lib}</td><td>${val}</td></tr>`;
+  const min=v=>Math.round(v).toLocaleString("fr-CH")+" min";
+
+  // étape 1 — les jours
+  let h=`<h4 class="ct">1 · Comment se répartissent les ${jours.length} jours de l'année</h4>
+  <table class="calc"><tbody>
+  ${lig("Jours de service",t.services)}
+  ${lig("Jours de compensation (COMP)",t.comp)}
+  ${lig("Jours de repos (R)",t.repos)}
+  ${t.vacances?lig("Jours de vacances",t.vacances):""}
+  ${lig("<b>Total</b>","<b>"+(t.services+t.comp+t.repos+t.vacances)+"</b>","tot")}
+  </tbody></table>`;
+
+  // étape 2 — temps de travail par tour
+  const codes=Object.keys(t.parTour).sort();
+  h+=`<h4 class="ct">2 · Le temps de travail, tour par tour</h4>
+  <div class="tblwrap"><table class="calc"><thead><tr><th>Tour</th><th>Fois par an</th><th>Travail unitaire</th><th>Sous-total</th></tr></thead><tbody>`;
+  for(const c of codes){
+    const p=t.parTour[c], u=TOURS[c]?TOURS[c].tt:0;
+    h+=`<tr><td class="txt">${esc(c)}</td><td>${p.n}</td><td>${u} min</td><td>${min(p.tt)}</td></tr>`;
+  }
+  h+=`<tr class="tot"><td class="txt"><b>Total</b></td><td><b>${t.services}</b></td><td></td>
+      <td><b>${min(t.tt)}</b> <span style="color:var(--muted)">(${Cct.minToHeures(t.tt)})</span></td></tr>
+      </tbody></table></div>`;
+
+  // étape 3 — le solde DTA
+  const surplus=t.tt-t.services*N;
+  const coutComp=t.comp*N;
+  h+=`<h4 class="ct">3 · Le solde DTA</h4>
+  <table class="calc"><tbody>
+  ${lig("Temps de travail total",min(t.tt))}
+  ${lig(`Norme des services : ${t.services} × ${N} min`,"− "+min(t.services*N))}
+  ${lig("<b>= temps accumulé au-dessus de la norme</b>","<b>"+dtaLong(surplus)+"</b>","tot")}
+  ${lig(`Compensations prises : ${t.comp} × ${N} min`, compDebite?"− "+min(coutComp):"non débitées (réglage « ne touchent pas le solde »)")}
+  ${lig("<b>= SOLDE DE L'ANNÉE</b>","<b>"+dtaLong(t.dta)+"</b>","tot fin")}
+  </tbody></table>
+  <p class="hint">Le temps accumulé finance ${(surplus/N).toFixed(1)} jours de compensation ; la rotation en prévoit ${t.comp}.</p>`;
+
+  // étape 4 — indemnités
+  h+=`<h4 class="ct">4 · Les indemnités, en francs</h4>
+  <div class="tblwrap"><table class="calc"><thead><tr><th>Nature</th><th>Minutes retenues</th><th>Calcul</th><th>Montant</th></tr></thead><tbody>
+  <tr><td class="txt">Nuit (20 h – 6 h)</td><td>${min(t.nuitMin)}</td><td>÷ 60 × 5.50</td><td>${chf(t.indNuit)}</td></tr>
+  <tr><td class="txt">Samedi (12 h – 20 h)</td><td>${min(t.samMin)}</td><td>÷ 60 × 5.50</td><td>${chf(t.indSam)}</td></tr>
+  <tr><td class="txt">Dimanche et fériés (6 h – 20 h)</td><td>${min(t.dimMin)}</td><td>÷ 60 × 5.50</td><td>${chf(t.indDim)}</td></tr>
+  <tr><td class="txt">Bonification de nuit (SBN)</td><td>${min(t.sbnMin)}</td><td>10 % / 40 % par minute</td><td>${chf(t.sbnChf)}</td></tr>
+  <tr class="tot"><td class="txt"><b>Total</b></td><td></td><td></td><td><b>${chf(t.indTotal)} CHF</b></td></tr>
+  </tbody></table></div>
+  <p class="hint">Les minutes de nuit sont arrondies au quart d'heure supérieur pour chaque service, puis additionnées.
+  La bonification SBN représente ${(t.sbnMin/N).toFixed(2)} jours de congé (${min(t.sbnMin)} ÷ ${N}).</p>`;
+
+  $("calcul").innerHTML=h;
+}
+
 
 function rendreControles(jours){
   const list=controles(jours);
@@ -1252,6 +1330,8 @@ Un dépassement n'est admis que dans des cas précis (formation, déplacement).<
 <h3>Le solde DTA</h3>
 <p>La norme est de <b class="k">6 h 50 par jour d'affectation</b>, soit 410 minutes. Pour chaque service :</p>
 <p><code>DTA = temps de travail − 410</code></p>
+<p>Le résultat s'exprime en <b class="k">minutes</b>, comme sur votre attestation. La page affiche l'équivalent en heures entre
+parenthèses, mais c'est bien la minute qui fait foi.</p>
 <p>Un tour de 8 h 33 rapporte <code>513 − 410 = +103 min</code>. Un tour de 5 h 58 coûte <code>358 − 410 = −52 min</code>.</p>
 <div class="ok">Cette formule a été vérifiée au chiffre près sur une attestation réelle : la somme calculée correspond exactement au total imprimé.</div>
 <h4>Et les jours de compensation ?</h4>
