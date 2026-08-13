@@ -229,8 +229,8 @@
       <div class="fld">
         <label for="compMode">Les jours COMP…</label>
         <select id="compMode">
+          <option value="neutre" selected>sont des congés dus (annexe 4 §1.6)</option>
           <option value="debit">débitent le solde (−6 h 50)</option>
-          <option value="neutre">sont des congés planifiés (neutres)</option>
         </select>
       </div>
       <div class="fld">
@@ -432,6 +432,20 @@ const TOURS_DEFAUT = {
   "1255":{deb:"04:00", fin:"13:30", tt:534, cond:295, pause:"",      lieu:""}
 };
 
+/* Temps de repos imprimés sur le planning, en minutes (null = pas de tour).
+   Ils servent de contrôle : le calcul doit retomber dessus. */
+const REPOS_DEFAUT=[
+  [ 713, null,2777, 842, 725, null,null],
+  [3503, 766, 870, null,3339, 789, 892],
+  [ 841, 725, 857, null,null,null,4999],
+  [1116, 973, 739, 752, null,2486, 943],
+  [ 776,1185, null,2325, 766, null,null],
+  [4597, 842, 725, 857, 739, 825, null],
+  [null,null,5083, 884, 870,1119, 770],
+  [null,3163, 842, 725, 857, null,null],
+  [3500, 870, null,3339, 842, 904, 788]
+];
+let REPOS_REF = REPOS_DEFAUT.map(r=>r.slice());
 let ROT = JSON.parse(JSON.stringify(ROT_DEFAUT));
 let TOURS = JSON.parse(JSON.stringify(TOURS_DEFAUT));
 
@@ -446,6 +460,10 @@ function chf(v){ return v.toLocaleString("fr-CH",{minimumFractionDigits:2,maximu
 function nb(v){ return Math.round(v).toLocaleString("fr-CH"); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function estTour(code){ return /^\d/.test(String(code||"").trim()); }
+/* Nombre de jours calendaires entre deux dates. On arrondit parce qu'une
+   journée de changement d'heure ne dure pas 24 h : compter en millisecondes
+   décalerait la position dans le cycle de fin mars à fin octobre. */
+function joursEntre(a,b){ return Math.round((b-a)/86400000); }
 function typeJour(code){ const c=String(code||"").trim().toUpperCase();
   if(c==="R"||c==="REPOS")return "repos"; if(c==="COMP")return "comp"; if(estTour(c))return "tour"; return "vide"; }
 
@@ -469,21 +487,21 @@ function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite){
   while(premierLundi.getDay()!==1) premierLundi.setDate(premierLundi.getDate()+1);
 
   // semaines de vacances : réparties régulièrement sur l'année (semaines ISO du calcul)
-  const totalSemaines=Math.ceil((new Date(annee,11,31)-premierLundi)/(7*86400000))+1;
+  const totalSemaines=Math.ceil(joursEntre(premierLundi,new Date(annee,11,31))/7)+1;
   const semVac=new Set();
   if(semVacances>0){ const pas=totalSemaines/(semVacances+1);
     for(let i=1;i<=semVacances;i++) semVac.add(Math.round(i*pas)); }
 
   const fin=new Date(annee,11,31);
   let prevFinAbs=null; // fin du dernier service, en minutes absolues depuis le 1er janvier
+  let interrompu=false; // vrai juste après des vacances : le repos suivant ne reflète plus la rotation
   for(let cur=new Date(annee,0,1); cur<=fin; cur.setDate(cur.getDate()+1)){
     const date=new Date(cur);
     const dow=(date.getDay()+6)%7;
-    const dayIndex=Math.round((date-new Date(annee,0,1))/86400000);
+    const dayIndex=joursEntre(new Date(annee,0,1),date);
 
     // position dans le cycle
-    const semIdx=Math.floor((date-premierLundi)/(7*86400000));
-    const semAbs=Math.floor((date-premierLundi)/(7*86400000)); // peut être négatif avant le 1er lundi
+    const semAbs=Math.floor(joursEntre(premierLundi,date)/7); // peut être négatif avant le 1er lundi
     const cycle=ROT.length||1;
     const pos=(((semDepart-1+semAbs)%cycle)+cycle)%cycle;
     const enVacances=semVac.has(semAbs);
@@ -529,11 +547,12 @@ function calculerAnnee(annee, semDepart, semVacances, deduirePause, compDebite){
       // repos avant ce service
       const debAbs=dayIndex*1440+s;
       if(prevFinAbs!=null) j.repos=debAbs-prevFinAbs;
+      j.reposComparable=!interrompu; interrompu=false;
       let finAbs=dayIndex*1440+e; if(e<=s) finAbs+=1440;
       prevFinAbs=finAbs;
     } else if(j.type==="comp"){
       j.dta = (compDebite===false) ? 0 : -Cct.Rcomp_Duree;
-    }
+    } else if(j.type==="vacances"){ interrompu=true; }
     jours.push(j);
   }
   return jours;
@@ -573,6 +592,27 @@ function agreger(jours){
 function controles(jours){
   const r=[];
   const tours=jours.filter(j=>j.type==="tour");
+
+  // cohérence avec le planning : les repos imprimés doivent retomber sur le calcul
+  if(REPOS_REF && REPOS_REF.length){
+    let bons=0, faux=0; const exemples=[];
+    for(const j of tours){
+      if(j.repos==null||!j.reposComparable)continue;
+      const l=REPOS_REF[j.semaineCycle-1];
+      const ref=l?l[j.dow]:null;
+      if(ref==null)continue;
+      if(Math.abs(j.repos-ref)<=2) bons++;
+      else{ faux++;
+        if(exemples.length<3) exemples.push(`${j.date.toLocaleDateString("fr-CH")} (tour ${j.code}) : ${Cct.minToHHMM(j.repos)} calculé contre ${Cct.minToHHMM(ref)} au planning`); }
+    }
+    const total=bons+faux;
+    if(total>0) r.push({niveau: faux===0?"ok":"bad", titre:"Cohérence avec le planning",
+      detail: faux===0
+        ? `Les <b>${bons}</b> temps de repos imprimés sur le planning sont tous retrouvés par le calcul. L'enchaînement des semaines et la lecture des horaires sont donc corrects.`
+        : `<b>${faux}</b> temps de repos sur ${total} ne correspondent pas au planning.<br>${exemples.join("<br>")}<br>`+
+          `L'ordre des lignes du cycle ou la lecture d'une case est probablement en cause : vérifiez la grille dans « Modifier la rotation ». `+
+          `Tant que cet écart existe, les totaux de l'année ne sont pas fiables.`});
+  }
 
   // repos entre services
   let r8=0,r9=0,r11=0,r12=0,minRepos=null,minReposDate=null;
@@ -657,7 +697,19 @@ function controles(jours){
       `• Si les jours COMP sont des congés planifiés qui ne touchent pas le compteur : <b>+${Cct.minToHHMM(dtaServices)}</b>.<br>`+
       `Le mode retenu ci-dessus est « ${compDebite?"les COMP débitent le solde":"les COMP sont neutres"} ». `+
       `Sur une attestation réelle, le solde dépend aussi des remplacements, des heures supplémentaires, des vacances et des absences — `+
-      `que la rotation seule ne contient pas. Les bornes de la CCT (art. 43) sont de +72 h 00 et −41 h 00.`});
+      `que la rotation seule ne contient pas. Les bornes conventionnelles du solde sont +72 h 00 et −41 h 00 (annexe 4 §1.3).`});
+
+  // jours de repos et de compensation, face aux droits de la CCT
+  const nbR=jours.filter(j=>j.type==="repos").length;
+  const nbC=jours.filter(j=>j.type==="comp").length;
+  const nbVac=jours.filter(j=>j.type==="vacances").length;
+  r.push({niveau:"ok", titre:"Jours de repos et de compensation",
+    detail:`La rotation planifie <b>${nbR}</b> jours de repos et <b>${nbC}</b> jours de compensation`+
+      (nbVac?`, plus ${nbVac} jours de vacances`:"")+`, soit <b>${nbR+nbC+nbVac}</b> jours sans service.<br>`+
+      `La CCT fixe le droit à <b>64 jours de repos</b> par année civile (annexe 4 §1.6) ; l'annexe 8 cite « 64 jours de repos et `+
+      `52 jours de compensation » — cette dernière mention vise le service de piquet, à confirmer pour la conduite.<br>`+
+      `Un tableau de service annuel comprend en plus les vacances et les jours RR, que la rotation seule ne contient pas : `+
+      `l'écart avec ces droits se comble à ce moment-là.`});
 
   return r;
 }
@@ -742,22 +794,24 @@ function lireRotation(mots){
     (cells[r+"|"+c]||(cells[r+"|"+c]=[])).push(w);
   }
 
-  const rot=[], tours={};
+  const rot=[], tours={}, repos=[];
   const enMin=s=>{ const p=s.split(":"); return (+p[0])*60+(+p[1]); };
   for(let r=0;r<ys.length;r++){
-    const ligne=[];
+    const ligne=[], ligneRepos=[];
     for(let c=0;c<cols.length;c++){
       const ws=(cells[r+"|"+c]||[]).slice().sort((a,b)=>a.y-b.y||a.x0-b.x0);
-      if(!ws.length){ ligne.push(""); continue; }
+      if(!ws.length){ ligne.push(""); ligneRepos.push(null); continue; }
       const txt=ws.map(w=>w.t).join(" ").toUpperCase();
-      if(txt.indexOf("REPOS")>=0){ ligne.push("R"); continue; }
-      if(txt.indexOf("COMP")>=0){ ligne.push("COMP"); continue; }
+      if(txt.indexOf("REPOS")>=0){ ligne.push("R"); ligneRepos.push(null); continue; }
+      if(txt.indexOf("COMP")>=0){ ligne.push("COMP"); ligneRepos.push(null); continue; }
       const wt=ws.find(w=>RE_TOUR.test(w.t));
       const heures=ws.filter(w=>RE_HEURE.test(w.t));
-      if(!wt||heures.length<2){ ligne.push(""); continue; }
+      if(!wt||heures.length<2){ ligne.push(""); ligneRepos.push(null); continue; }
       const code=wt.t; ligne.push(code);
-      if(tours[code]) continue;
       const axe=(wt.x0+wt.x1)/2;
+      const gauche=heures.filter(w=>Math.abs(w.y-wt.y)>6 && (w.x0+w.x1)/2<axe).sort((a,b)=>a.y-b.y);
+      ligneRepos.push(gauche[0]?enMin(gauche[0].t):null);
+      if(tours[code]) continue;
       const haut=heures.filter(w=>Math.abs(w.y-wt.y)<=6).sort((a,b)=>a.x0-b.x0);
       const bas=heures.filter(w=>Math.abs(w.y-wt.y)>6);
       const droite=bas.filter(w=>(w.x0+w.x1)/2>=axe).sort((a,b)=>a.y-b.y);
@@ -772,10 +826,10 @@ function lireRotation(mots){
       if(p && Cct.amplitude(enMin(deb),enMin(finBrut))-rec.tt>0){ rec.pause=p.h; rec.lieu=p.lieu; }
       tours[code]=rec;
     }
-    rot.push(ligne);
+    rot.push(ligne); repos.push(ligneRepos);
   }
   if(!rot.flat().filter(c=>RE_TOUR.test(c)).length) throw new Error("aucun tour de service trouvé dans le tableau");
-  return {rot, tours, colonnes:cols.map(c=>c.label)};
+  return {rot, tours, repos, colonnes:cols.map(c=>c.label)};
 }
 
 /* ================= rendu ================= */
@@ -795,15 +849,19 @@ function rendre(){
   $("anneeLabel").textContent=`${annee} · ${jours.length} jours · cycle démarré en semaine ${semDepart}`;
 
   /* KPI */
-  const heuresNorme=t.services*Cct.Rcomp_Duree;
+  const autreDta = compDebite ? t.dta+t.comp*Cct.Rcomp_Duree : t.dta-t.comp*Cct.Rcomp_Duree;
+  const semEff = Math.max(1,(jours.length-t.vacances)/7);
+  const hSem = t.tt/60/semEff;
   $("kpis").innerHTML=[
     kpi("Jours de service", nb(t.services), `${t.comp} compensations · ${t.repos} repos`+(t.vacances?` · ${t.vacances} j. vacances`:"")),
-    kpi("Temps de travail", Cct.minToHeures(t.tt), `moyenne ${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service`,"info"),
+    kpi("Temps de travail", Cct.minToHeures(t.tt),
+        `${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service · <b style="color:var(--txt)">${hSem.toFixed(1)} h</b> par semaine travaillée`,"info"),
     kpi("Amplitude cumulée", Cct.minToHeures(t.ampl), `dont ${Cct.minToHeures(t.pause)} de pauses`),
     kpi("Temps de conduite", Cct.minToHeures(t.cond), `${t.tt?Math.round(t.cond/t.tt*100):0} % du temps de travail`),
     kpi("Solde DTA", (t.dta>0?"+":"")+Cct.minToHeures(t.dta),
-        (compDebite?"travail − 6 h 50 par jour d'affectation, compensations comprises":"travail − 6 h 50 par service, compensations neutres")
-        +" — voir « Équilibre du solde DTA »", t.dta>=0?"good":"info"),
+        `<b style="color:var(--txt)">ou ${(autreDta>0?"+":"")+Cct.minToHeures(autreDta)}</b> si les jours COMP ${compDebite?"sont des congés planifiés":"débitent le solde"} — `
+        +`les deux lectures diffèrent de ${Cct.minToHeures(t.comp*Cct.Rcomp_Duree)}. Voir « Équilibre du solde DTA ».`,
+        t.dta>=0?"good":"info"),
     kpi("Indemnités", chf(t.indTotal)+" CHF", `nuit ${chf(t.indNuit)} · sam ${chf(t.indSam)} · dim ${chf(t.indDim)} · SBN ${chf(t.sbnChf)}`,"good"),
     kpi("Bonification nuit", Cct.minToHeures(t.sbnMin), `${chf(t.sbnChf)} CHF · ${(t.sbnMin/410).toFixed(2)} jours de congé`,"info"),
     kpi("Services de nuit", nb(t.nuitsNocturnes), `touchant la plage 0 h – 4 h`, t.nuitsNocturnes>140?"warn":""),
@@ -845,7 +903,7 @@ function rendreRuban(jours){
   mdiv.style.gridAutoFlow="column";
   const annee=jours[0].date.getFullYear();
   for(let m=0;m<12;m++){
-    const idx=Math.round((new Date(annee,m,1)-jours[0].date)/86400000);
+    const idx=joursEntre(jours[0].date,new Date(annee,m,1));
     const col=Math.floor((idx+decal)/7)+1;
     const span=document.createElement("span");
     span.textContent=MOIS[m].slice(0,3);
@@ -1020,7 +1078,7 @@ async function traiterFichier(f){
     try{
       const mots=await motsDuPdf(f);
       const res=lireRotation(mots);
-      ROT=res.rot; TOURS=res.tours;
+      ROT=res.rot; TOURS=res.tours; REPOS_REF=res.repos||null;
       majSelecteurSemaines();
       $("rotSrc").textContent=`${f.name} — ${ROT.length} semaines de cycle, ${Object.keys(TOURS).length} tours`;
       const sansTt=Object.keys(TOURS).filter(c=>!TOURS[c].tt);
@@ -1042,7 +1100,7 @@ async function traiterFichier(f){
       try{
         const o=JSON.parse(rd.result);
         if(Array.isArray(o.rotation)&&o.rotation.length&&o.tours){
-          ROT=o.rotation; TOURS=o.tours; majSelecteurSemaines();
+          ROT=o.rotation; TOURS=o.tours; REPOS_REF=o.repos||null; majSelecteurSemaines();
           $("rotSrc").textContent="rotation importée depuis "+f.name;
           msgImport(`Rotation chargée : <b>${ROT.length} semaines</b>, ${Object.keys(TOURS).length} tours.`,"ok");
           rendreEditeur(); rendre();
@@ -1080,7 +1138,7 @@ $("btnCsv").onclick=()=>{
   telecharger(`rotation-${$("annee").value}.csv`,"\ufeff"+l.join("\r\n"),"text/csv;charset=utf-8");
 };
 $("btnJson").onclick=()=>telecharger("rotation.json",
-  JSON.stringify({cycle:ROT.length,rotation:ROT,tours:TOURS},null,2),"application/json");
+  JSON.stringify({cycle:ROT.length,rotation:ROT,tours:TOURS,repos:REPOS_REF},null,2),"application/json");
 
 /* ===================================================================
    FAQ
@@ -1179,16 +1237,17 @@ Un dépassement n'est admis que dans des cas précis (formation, déplacement).<
 <p>Un tour de 8 h 33 rapporte <code>513 − 410 = +103 min</code>. Un tour de 5 h 58 coûte <code>358 − 410 = −52 min</code>.</p>
 <div class="ok">Cette formule a été vérifiée au chiffre près sur une attestation réelle : la somme calculée correspond exactement au total imprimé.</div>
 <h4>Et les jours COMP ?</h4>
-<p>C'est le point délicat, et la page vous laisse choisir.</p>
-<ul>
-<li>Un <b class="k">jour de compensation pris</b> (JComp sur l'attestation) débite 410 min : vous consommez des heures accumulées.</li>
-<li>Un <b class="k">jour de congé planifié</b> ne touche pas le compteur.</li>
-</ul>
-<p>Selon la lecture retenue, le solde annuel change énormément. Le bloc « Équilibre du solde DTA », en bas de la page, chiffre les
-deux scénarios ainsi qu'un troisième : les jours pris en compensation de la bonification de nuit (ComSBN), qui débitent le
-compteur SBN et non le DTA.</p>
-<div class="att">Pour trancher, regardez une de vos attestations : un jour COMP de la rotation y apparaît-il avec −410 en colonne DTA, ou pas de DTA du tout ?</div>
-<div class="ref">Bornes du solde : <b class="k">+72 h</b> et <b class="k">−41 h</b>. Réf. utilisée : CCT transN art. 43.</div>`},
+<p>La CCT tranche : les jours de compensation sont des <b class="k">congés dus</b>, pas une ponction sur vos heures.</p>
+<div class="ref">Annexe 4 §1.6 : « Le collaborateur a droit à 64 jours de repos par année civile. Selon art. 8 OLDT, les jours de congé
+qui doivent être accordés au travailleur <b class="k">pour respecter les prescriptions sur la durée du travail</b> sont désignés comme
+jours de compensation. » L'annexe 8 cite « 64 jours de repos et 52 jours de compensation » par année.</div>
+<p>Un jour de compensation planifié fait donc partie du dispositif de repos : il ne débite pas le compteur. C'est le réglage par
+défaut de la page.</p>
+<p>À ne pas confondre avec un <b class="k">JComp pris en cours de mois</b> pour résorber un solde positif : celui-là apparaît sur
+l'attestation avec −410 en colonne DTA. Le réglage « débitent le solde » permet de simuler ce cas.</p>
+<div class="att">Le bloc « Équilibre du solde DTA » chiffre les deux lectures ainsi qu'un troisième cas : les jours pris en
+compensation de la bonification de nuit (ComSBN), qui débitent le compteur SBN et non le DTA.</div>
+<div class="ref">Bornes du solde : <b class="k">+72 h</b> et <b class="k">−41 h</b>. Réf. utilisée : CCT annexe 4 §1.3.</div>`},
   {id:"c-nuit", t:"Indemnité de nuit", h:`
 <h3>Indemnité de nuit</h3>
 <p>Elle rémunère les heures passées entre <b class="k">20 h et 6 h</b>, au taux de <b class="k">5,50 CHF par heure</b>.</p>
@@ -1229,7 +1288,7 @@ dimanche de 6 h à 15 h. Sur l'attestation, tout est regroupé dans une seule co
 <h4>Du temps ou de l'argent ?</h4>
 <p>D'abord du <b class="k">temps</b> : le SBN alimente un compteur annuel. Une fois 410 minutes accumulées, cela représente un jour
 de congé — c'est ce que la page affiche sous « jours de congé ». Le montant en francs est indiqué à titre de comparaison.</p>
-<div class="ref">Réf. utilisée : OLDT art. 17.</div>`},
+<div class="ref">Réf. utilisée : LDT art. 4a, reprise par la CCT annexe 4 §1.5.</div>`},
   {id:"c-repos", t:"Le repos entre deux services", h:`
 <h3>Le repos entre deux services</h3>
 <p>C'est le temps entre la fin d'un service et le début du suivant. La page le calcule sur toute l'année et signale le plus court.</p>
@@ -1258,17 +1317,17 @@ sans que cette page le voie.</div>`}
  ]},
  {grp:"Questions fréquentes", items:[
   {id:"q-dta", t:"Pourquoi mon solde DTA est négatif ?", h:`
-<h3>Pourquoi le solde DTA ressort négatif ?</h3>
-<p>Parce que la page suppose, par défaut, que <b class="k">chaque jour COMP débite 410 minutes</b>. Sur la rotation CDF, les services
-accumulent environ +291 h dans l'année, mais 52 jours de compensation en retireraient 355 h : le solde plonge.</p>
-<h4>Est-ce inquiétant ?</h4>
-<p>Probablement pas. Les soldes réels observés sur des attestations sont <b class="k">positifs et croissants</b>. Si chaque COMP
-débitait vraiment le compteur, personne ne serait dans le vert. Une partie de ces jours sont donc vraisemblablement des congés
-planifiés, ou pris sur le compteur SBN.</p>
-<h4>Que faire</h4>
-<p>Basculez le réglage <b class="k">« Les jours COMP… »</b> sur « congés planifiés » et comparez. Le bloc « Équilibre du solde DTA »
-donne les trois scénarios chiffrés. Votre attestation tranche : regardez si un jour COMP y porte −410 en colonne DTA.</p>
-<div class="att">Le DTA n'est pas une limite légale, c'est un compteur de gestion. Les bornes conventionnelles sont +72 h et −41 h (CCT art. 43).</div>`},
+<h3>Le solde DTA peut-il ressortir négatif ?</h3>
+<p>Oui, si vous basculez le réglage <b class="k">« Les jours COMP… »</b> sur « débitent le solde ». Chaque jour de compensation
+retire alors 410 minutes, et 52 jours par an font −355 h face aux +291 h accumulées par les services.</p>
+<h4>Mais ce n'est pas la lecture de la CCT</h4>
+<p>Les jours de compensation sont des congés accordés <b class="k">pour respecter les prescriptions sur la durée du travail</b>
+(annexe 4 §1.6, renvoyant à l'art. 8 OLDT). Ils font partie du repos dû, ils ne consomment pas un solde d'heures. C'est pourquoi
+le réglage par défaut est « congés dus » — et le solde ressort alors largement positif.</p>
+<h4>Le bon indicateur du temps plein</h4>
+<p>Ce n'est pas le DTA mais le <b class="k">volume horaire</b>. Regardez le compteur « Temps de travail » : il affiche les heures
+par semaine travaillée. Une rotation qui vous fait tourner autour de 41 h assure bien un temps plein, quel que soit le signe du DTA.</p>
+<div class="att">Le DTA est un compteur de gestion, pas une limite légale. Ses bornes conventionnelles sont +72 h et −41 h (annexe 4 §1.3).</div>`},
   {id:"q-nuit", t:"Pourquoi le total de nuit est « un plafond » ?", h:`
 <h3>Pourquoi le total de nuit est un plafond</h3>
 <p>Parce que les pauses ne sont pas indemnisées, et que les plannings n'indiquent pas <b class="k">à quelle heure</b> elles tombent.</p>
@@ -1356,8 +1415,8 @@ function majSelecteurSemaines(){
   rendreEditeur();
   rendre();
   ["annee","sem1","vac","deduirePause","compMode"].forEach(id=>$(id).addEventListener("change",rendre));
-  $("btnApply").onclick=()=>{ lireEditeur(); rendreEditeur(); rendre(); };
-  $("btnReset").onclick=()=>{ ROT=JSON.parse(JSON.stringify(ROT_DEFAUT)); TOURS=JSON.parse(JSON.stringify(TOURS_DEFAUT));
+  $("btnApply").onclick=()=>{ lireEditeur(); REPOS_REF=null; rendreEditeur(); rendre(); };
+  $("btnReset").onclick=()=>{ ROT=JSON.parse(JSON.stringify(ROT_DEFAUT)); TOURS=JSON.parse(JSON.stringify(TOURS_DEFAUT)); REPOS_REF=REPOS_DEFAUT.map(r=>r.slice());
     majSelecteurSemaines(); $("rotSrc").textContent="exemple : rotation CDF (planning 04.10.2027 – 10.10.2027)"; msgImport(""); rendreEditeur(); rendre(); };
 })();
 </script>
