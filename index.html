@@ -1049,14 +1049,29 @@ async function motsDuPdf(file){
 
 function lireRotation(mots){
   const dates=mots.filter(w=>RE_DATE.test(w.t)).sort((a,b)=>a.x0-b.x0);
-  if(dates.length<2) throw new Error("aucun en-tête de dates reconnu dans ce PDF");
   const cols=[];
-  for(const w of dates){
-    const cx=(w.x0+w.x1)/2;
-    if(!cols.length || Math.abs(cx-cols[cols.length-1].cx)>20) cols.push({cx, label:w.t});
+  let yEntete;
+  if(dates.length>=2){
+    // cas habituel : les dates de l'en-tête donnent les colonnes
+    for(const w of dates){
+      const cx=(w.x0+w.x1)/2;
+      if(!cols.length || Math.abs(cx-cols[cols.length-1].cx)>20) cols.push({cx, label:w.t});
+    }
+    yEntete=Math.max.apply(null,dates.map(w=>w.y));
+  } else {
+    // certains plannings n'impriment pas les dates : on retrouve alors les colonnes
+    // en regroupant les éléments qui structurent le tableau (tours, COMP, repos, réserve).
+    const struct=mots.filter(w=>RE_TOUR.test(w.t)||/^(COMP|JOUR|RÉSERVE|RESERVE)$/i.test(w.t))
+                     .map(w=>(w.x0+w.x1)/2).sort((a,b)=>a-b);
+    let groupe=[];
+    for(const cx of struct){
+      if(groupe.length && cx-groupe[groupe.length-1]<25) groupe.push(cx);
+      else { if(groupe.length) cols.push({cx:groupe.reduce((a,b)=>a+b,0)/groupe.length, label:""}); groupe=[cx]; }
+    }
+    if(groupe.length) cols.push({cx:groupe.reduce((a,b)=>a+b,0)/groupe.length, label:""});
+    yEntete=-Infinity;
   }
-  if(cols.length<2) throw new Error("colonnes de jours non identifiables");
-  const yEntete=Math.max.apply(null,dates.map(w=>w.y));
+  if(cols.length<2) throw new Error("colonnes de jours non identifiables dans ce PDF");
   const bornes=cols.map((c,i)=>[
     i===0 ? -Infinity : (cols[i-1].cx+c.cx)/2,
     i===cols.length-1 ? Infinity : (c.cx+cols[i+1].cx)/2
@@ -1064,8 +1079,12 @@ function lireRotation(mots){
   const largeur=cols.length>1 ? cols[1].cx-cols[0].cx : 100;
   const bordGauche=cols[0].cx-largeur/2;
 
-  const nums=mots.filter(w=>/^\d{1,2}$/.test(w.t) && w.x1<bordGauche && w.y>yEntete)
-                 .sort((a,b)=>a.y-b.y);
+  let nums=mots.filter(w=>/^\d{1,2}$/.test(w.t) && w.x1<bordGauche && w.y>yEntete)
+               .sort((a,b)=>a.y-b.y);
+  // ne conserver que la suite 1, 2, 3… : écarte les nombres parasites (pied de page, dates)
+  const suite=[]; let attendu=1;
+  for(const w of nums){ if(+w.t===attendu){ suite.push(w); attendu++; } }
+  if(suite.length>=2) nums=suite;
   if(nums.length<2) throw new Error("numéros de semaine non trouvés à gauche du tableau");
   const ys=nums.map(n=>n.y);
   const pas=(ys[ys.length-1]-ys[0])/(ys.length-1);
