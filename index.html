@@ -391,7 +391,7 @@ const Cct = {
   NocturneZone_Start:0, NocturneZone_End:4*60,
   Amplitude_Max:720, Amplitude_CibleMax:660, TE_Max_Tour:600,
   Repos_AbsMin:540, Repos_Hebdo:660, Repos_Cible:720, Nuits_Max_28j:15,
-  Rcomp_Duree:410, Norme_Journaliere:480,
+  Rcomp_Duree:410, Norme_Journaliere:480, DureeNormative_An:2042*60,
   FeriesFixesNE:new Set(["01-01","01-02","03-01","05-01","08-01","12-25","12-26"]),
 
   amplitude(s,e){ if(e<=s)e+=1440; return e-s; },
@@ -973,6 +973,31 @@ function controles(jours){
         ? `Mois en défaut : ${moisFaibles.map(x=>x.m+" ("+x.r+" repos, "+x.dim+" dimanche)").join(", ")}.`
         : `Chaque mois de l'année satisfait cette règle.`)});
 
+  // durée normative annuelle : travail planifié et exigence du compteur face aux 2042 h de la CCT
+  {
+    const si2=jours.socleInfo;
+    const nbRN=jours.filter(j=>j.type==="repos").length;
+    const nbVacN=jours.filter(j=>j.type==="vacances").length;
+    const nbResN=jours.filter(j=>j.type==="reserve").length;
+    const ttComp=totalTT+Cct.Rcomp_Duree*nbVacN;
+    const exig=Cct.Rcomp_Duree*(tours.length+nbComp0);
+    const eTT=ttComp-Cct.DureeNormative_An, eEx=exig-Cct.DureeNormative_An;
+    const manque=Math.max(0,64-nbRN);
+    r.push({niveau: eEx>20*60 ? "warn":"ok", titre:"Durée normative annuelle (CCT art. 43.1)",
+      detail:`La CCT fixe la durée normative à <b>41 h par semaine, soit 2042 heures annuelles</b> (122 520 min), vacances comprises à leur valeur théorique.<br>`
+      +`<b>Travail planifié par la rotation :</b> ${Cct.minToHeures(totalTT)}`
+      +(nbVacN?` + ${nbVacN} j de vacances × 410 min = <b>${Cct.minToHeures(ttComp)}</b>`:``)
+      +` → écart : <b style="color:${eTT>=0?'#8fd18f':'var(--amber)'}">${dtaLong(eTT)}</b>`
+      +(nbResN?` <i>(hors ${nbResN} j de réserve sans horaire connu ; travaillés à 410–480 min/j, ils ajouteraient ${Cct.minToHeures(nbResN*410)} à ${Cct.minToHeures(nbResN*480)})</i>`:``)+`.<br>`
+      +`<b>Exigence de la comptabilité du compteur :</b> (${tours.length} services + ${nbComp0} compensations) × 410 min = <b>${Cct.minToHeures(exig)}</b>, `
+      +`soit <b style="color:${eEx>20*60?'var(--amber)':'var(--txt)'}">${dtaLong(eEx)}</b> face aux 2042 h que la CCT définit comme le plein temps.`
+      +(manque>0
+        ?`<br>Décomposition : <b>${manque} jours de repos manquants × 410 min = ${Cct.minToHeures(manque*410)}</b> (socle de 64, art. 42.3 CCT), le reste étant la tension interne de la norme — 410 min/j sur 301 jours donnent 2056 h 50, contre 2042 h (+ 14 h 50).`
+        :`<br>Socle de repos atteint : l'exigence retombe vers 2056 h 50 ; ne subsiste que la tension interne de la norme (410 vs 407 min/j, + 14 h 50).`)
+      +(si2&&si2.requalifies>0?`<br><b style="color:#8fd18f">Réglage « Socle de jours de repos » actif : ${si2.requalifies} COMP requalifiés en R — l'exigence ci-dessus en tient déjà compte.</b>`:``)
+      +`<br><span style="color:var(--muted)">Lecture : le déficit du compteur ne vient pas d'un manque de travail fourni — la rotation fait la durée normative, et davantage selon le dépôt — mais d'une comptabilité qui, à ~52 repos, réclame l'équivalent de ~2 139 h.</span>`});
+  }
+
   // équilibre de la rotation : les compensations résorbent-elles ce que les services accumulent ?
   const si=jours.socleInfo;
   const dtaServices=tours.reduce((a,j)=>a+j.dta,0);
@@ -1231,6 +1256,7 @@ function rendre(){
   const autreDta = compDebite ? t.dta+t.comp*Cct.Rcomp_Duree : t.dta-t.comp*Cct.Rcomp_Duree;
   const semEff = Math.max(1,(jours.length-t.vacances)/7);
   const hSem = t.tt/60/semEff;
+  const ecartNorm = t.tt + Cct.Rcomp_Duree*(t.vacances||0) - Cct.DureeNormative_An;
   const si=jours.socleInfo;
   const socleNote = si && si.requalifies>0
     ? ` — <b style="color:#8fd18f">socle appliqué : ${si.requalifies} COMP requalifiés en R (cible ${si.cible} j)</b>`
@@ -1242,7 +1268,8 @@ function rendre(){
   $("kpis").innerHTML=[
     kpi("Jours de service", nb(t.services), `${t.comp} compensations · ${t.repos} repos`+(si&&si.requalifies>0?` <b style="color:#8fd18f">(dont ${si.requalifies} requalifiés)</b>`:"")+(t.reserve?` · <b style="color:var(--amber)">${t.reserve} réserve</b>`:"")+(t.vacances?` · ${t.vacances} j. vacances`:"")),
     kpi("Temps de travail", Cct.minToHeures(t.tt),
-        `${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service · <b style="color:var(--txt)">${hSem.toFixed(1)} h</b> par semaine travaillée`,"info"),
+        `${Cct.minToHHMM(t.services?t.tt/t.services:0)} par service · <b style="color:var(--txt)">${hSem.toFixed(1)} h</b> par semaine travaillée`+
+        ` · vs 2042 h normatives (art. 43.1) : <b style="color:${ecartNorm>=0?'#8fd18f':'var(--amber)'}">${dtaLong(ecartNorm)}</b>${t.reserve?` <span style="color:var(--muted)">(hors ${t.reserve} j de réserve)</span>`:``}`,"info"),
     kpi("Amplitude cumulée", Cct.minToHeures(t.ampl), `dont ${Cct.minToHeures(t.pause)} de pauses`),
     kpi("Temps de conduite", Cct.minToHeures(t.cond), `${t.tt?Math.round(t.cond/t.tt*100):0} % du temps de travail`),
     kpi("Solde DTA", dtaMin(t.dta),
@@ -1824,6 +1851,21 @@ contrôles suivent la case à cocher.</p>
 <div class="att">C'est une évaluation « à étiquettes constantes », pas une prédiction : elle montre que le déficit du
 compteur et le manque de jours de repos sont un seul et même problème. La répartition annuelle réelle (OLDT art. 26)
 fait foi.</div>`},
+  {id:"q-2042", t:"D'où viennent les 2042 heures ?", h:`
+<h3>2042 heures : la durée normative annuelle</h3>
+<p>L'art. 43 al. 1 de la CCT fixe la durée hebdomadaire à <b class="k">41 heures</b> en moyenne annuelle,
+« soit <b class="k">2042 heures annuelles</b> ». Le compte est transparent : 365 jours − 64 repos − 52 compensations
+= 249 jours × 492 min (41 h ÷ 5) = 2042 h. Les vacances sont <b class="k">comprises</b> dans ce total, à leur valeur théorique.</p>
+<p>Sur le compteur (semaine d'exploitation de 6 jours), la norme est de <b class="k">410 min par jour</b> (41 h ÷ 6) de service
+ou de compensation. À 64 repos, l'année « compteur » vaut 301 × 410 = <b class="k">2056 h 50</b> — 14 h 50 au-dessus des 2042 h :
+une petite tension interne à la CCT (410 contre 407 min/j), sans conséquence tant que les repos sont là.</p>
+<p>Avec les <b class="k">52 repos</b> des rotations brutes, en revanche, la comptabilité réclame 313 × 410 =
+<b class="k">2138 h 50</b>, soit <b class="k">96 h 50 de plus que la durée normative</b> : 12 repos manquants × 410 (82 h)
+plus la tension interne (14 h 50). C'est le même déficit que le solde DTA, vu sous l'angle des heures.</p>
+<div class="att">Les rotations 2027 font travailler 1955 à 2090 h selon le dépôt et la position — la durée normative est
+atteinte, et dépassée à La Chaux-de-Fonds et Fleurier (Neuchâtel passe dessous uniquement parce que ~10 jours de réserve
+n'ont pas d'horaire). Le plafond légal, lui, est ailleurs : (365 − 63) × 7 h = 2114 h (art. 4 LDT / art. 9 OLDT). Personne
+ne peut donc répondre « travaillez plus » : le problème est l'étiquetage des jours, pas le volume.</div>`},
   {id:"q-nuit", t:"Pourquoi le total de nuit est « un plafond » ?", h:`
 <h3>Pourquoi le total de nuit est un plafond</h3>
 <p>Parce que les pauses ne sont pas indemnisées, et que les plannings n'indiquent pas <b class="k">à quelle heure</b> elles tombent.</p>
